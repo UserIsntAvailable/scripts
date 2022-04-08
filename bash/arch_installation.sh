@@ -1,0 +1,258 @@
+#!/usr/bin/bash
+
+# This is my custom installation script of Arch Linux.
+# I will recommend reading the commands that Im using
+# before using it, because I hard coded some values
+# that you might not need/use. (todo tags are mostly
+# things that you might need to change)
+
+
+# Variables
+
+RE="\033[0m" # remove effects
+DISK_SEPARATOR="\033[31m|${RE}"
+
+
+# Functions
+
+# Shows a selection list prompt
+# $1: the list of choices
+# returns: the value that was selected
+selection_list() {
+    local old_ifs="$IFS"
+    local old_columns="$COLUMNS" # just in case.
+    IFS=$'\n' # line separators are now "\n"
+    COLUMNS=1 # puts every entry in a different line.
+    
+    select choice in $1; do break; done # todo: I should probably add error handling.
+    echo "$choice"
+    
+    IFS="$odl_ifs"
+    COLUMNS="$old_columns"
+}
+
+# $1: device to use
+get_available_iwctl_networks() {
+    local iwctl_networks="$(iwctl station "$1" get-networks rssi-dbms)"
+    local last_row_index="$(echo "$iwctl_networks" | wc -l)"
+    local networks="$(echo "$iwctl_networks" | \
+    awk -v "lri=$last_row_index" '{
+        for(i=5;i<lri;i++) {
+            if (NR==i) {
+                printf $1;
+                for(j=2;j<=NF-2;j++) {
+                    printf " %s",$j;
+                }
+		print "";
+            }
+        }
+    }')"
+    echo "$networks"
+}
+
+# Retrives all available disks
+get_available_disks() {
+    local disks="$( \
+        fdisk -l | \
+        awk '
+            $2~/\/dev\// {printf "%s%s%s",$2,$3,$4;}
+            $2~/model/ {
+                printf $3;
+	       	for(i=4;i<=NF;i++) {
+                    printf " %s",$i; 
+                }
+                print "";
+            }' | \
+        sed "s/[:,]/$(printf "$DISK_SEPARATOR")/g" \
+    )"
+    echo "$disks"
+}
+
+# todo: echo on what section we are currently on.
+echo
+
+
+# Connect to the internet
+
+# todo: give the choice between Wifi, mobile hostpot & ethernet.
+# todo: if user is already connected just continue
+
+device="wlan0" # todo: I should probably also ask what device the user wants to use.
+iwctl station "$device" scan
+SSID="$(selection_list "$(get_available_iwctl_networks "$device")")"
+iwctl --passphrase="$(read -s -p "Password: " pass && echo "$pass")" station "$device" connect "$SSID" 
+
+sleep 3 && echo; echo # todo: loading prompt...
+
+# todo: error handling. If internet connection isnt working, go back to set internet once again.
+ping -c 2 archlinux.org && echo
+
+
+# Update the system clock
+
+timedatectl set-ntp true
+
+
+# Partition the disks
+
+# todo: let the user decide if they want to partion manually.
+while : ; do
+    disk="$(echo "$(selection_list "$(get_available_disks)")" | \
+        awk -F "\033\\\[31m\\\|\033\\\[0m" '{print $1}' \
+    )"
+    echo
+    read -p "Are you sure that you wanna use "${disk}"? (y/N) " answer && \
+	    [[ "$answer" =~ ^[Nn] || -z "$answer" ]] && echo || break
+done
+
+disk_start=1
+# todo: ask if efi/boot/nothing.
+efi_section_size=550
+efi_section_end=$(($disk_start+$efi_section_size))
+
+total_memory_GB=$(($(cat /proc/meminfo | awk '$1 ~/MemTotal/ {print$2}') / 1000000))
+
+
+#https://askubuntu.com/questions/49109/i-have-16gb-ram-do-i-need-32gb-swap
+swap_section_size=$(echo "x=l(sqrt(${total_memory_GB}))/l(2); scale=0; 2^((x+0.5)/1)" | bc -l)
+
+read -p "Are you planning to use hibernation? (y/N): " answer && echo
+swap_section_end=$( \
+    echo "$efi_section_end" | \
+    awk '{print $1/1000;}' | \
+    awk -v "sss=$swap_section_size" \
+        -v "es=$([[ $answer =~ ^[Yy] ]] && echo $total_memory_GB || echo 0)" \
+        '{print $1+sss+es;}' \
+)
+
+# todo: ask if $HOME and / should be separated.
+parted -s -a optimal "$disk" \
+    mklabel gpt \
+    mkpart "efi" fat32 "${disk_start}MiB" "${efi_section_end}MiB" set 1 esp on \
+    mkpart "swap" linux-swap "${efi_section_end}MiB" "${swap_section_end}GiB" \
+    mkpart "root" ext4 "${swap_section_end}GiB" 100% && echo
+
+efi_part="${disk}1"
+swap_part="${disk}2"
+root_part="${disk}3"
+
+
+# Format the partitions
+
+mkfs.fat -F 32 "$efi_part" && echo
+mkswap "$swap_part" && echo
+mkfs.ext4 "$root_part" && echo
+
+
+# Mount the file systems
+
+root_mnt=/mnt
+mount "$root_part" "$root_mnt" && echo
+
+efi_mnt=/mnt/efi
+mkdir "$efi_mnt"
+mount "$efi_part" "$efi_mnt" && echo
+
+swapon "$swap_part"
+
+
+# Install essential packages
+
+# todo: change the packages depending of efi/bios/windows_dual_boot etc...
+pacstrap "$root_mnt" base linux linux-firmware grub efibootmgr sudo vim networkmanager && echo
+
+
+# Fstab
+
+genfstab -U "$root_mnt" >> "$root_mnt/etc/fstab"
+
+
+# Chroot Setup
+
+# Setting variables needed before running chroot script.
+# I dont really know if there is a better way to do this.
+
+# todo: error handling. If the user writes a bad name, let them choose another one.
+# 	hard to implement, since once the chroot script starts, stdout stop working?
+read -p "What will be your hostname?: " hostname && echo
+read -p "What will be your main user name? (Leave blank to cancel): " username && echo
+
+# Creating a new file and running it through chroot will actually be prompted.
+chroot_script_name="chrootrc"
+chroot_script_path="${root_mnt}/${chroot_script_name}"
+cat <<CHROOT_SCRIPT > "$chroot_script_path"
+# Time zone
+
+# todo: let the user decide their zoneinfo.
+ln -sf /usr/share/zoneinfo/America/Quebec /etc/localtime
+
+hwclock --systohc
+
+
+# Localization
+
+locale="en_US.UTF-8 UTF-8" # todo: let the user change the locale
+sed -i -e "s/^#\${locale}/\${locale}/" /etc/locale.gen
+
+locale-gen && echo
+
+echo "\$locale" | awk '{printf "LANG=%s\n",\$1}' > /etc/locale.conf
+
+
+# Network Configuration
+
+echo "$hostname" > /etc/hostname
+
+printf "\
+127.0.0.1\tlocalhost
+::1\t\tlocalhost
+127.0.1.1\t$hostname.localdomain\t$hostname\n" \
+> /etc/hosts
+
+
+# Users
+
+echo "[$hostname]"
+passwd && echo
+
+if [[ -n "$username" ]]; then
+    # todo: error handling. If the user writes a bad name, let them choose another one.
+    useradd -m "$username"
+    echo "[$username]"
+    passwd "$username" && echo
+    # todo: let the user select the permissions that they need.
+    usermod -aG wheel,audio,video,optical,storage "$username"
+fi
+
+
+# Visudo
+
+wheel_group="%wheel ALL=(ALL:ALL) ALL"
+sed -i -e "s/^# \${wheel_group}$/\${wheel_group}/" /etc/sudoers
+
+
+# Grub
+
+# todo: let the user configure their grub.
+# todo: uncomment GRUB_DISABLE_OS_PROBER=false if the user is planning to use dual boot.
+grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB && echo
+grub-mkconfig -o /boot/grub/grub.cfg && echo
+
+
+# Network Manager
+
+systemctl enable NetworkManager && echo
+CHROOT_SCRIPT
+
+
+# Chroot
+
+chmod 0755 "$chroot_script_path"
+arch-chroot "$root_mnt" "/$chroot_script_name"
+rm "$chroot_script_path"
+
+
+# Reboot
+
+umount -R "$root_mnt"
+echo "Done. You can now reboot or configure something that I missed."
