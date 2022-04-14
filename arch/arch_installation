@@ -20,13 +20,11 @@ DISK_SEPARATOR="\033[31m|${RE}"
 # returns: the value that was selected
 selection_list() {
     local old_ifs="$IFS"
-    local old_columns="$COLUMNS" # just in case.
+    local old_columns="$COLUMNS"
     IFS=$'\n' # line separators are now "\n"
     COLUMNS=1 # puts every entry in a different line.
-    
     select choice in $1; do break; done # todo: I should probably add error handling.
     echo "$choice"
-    
     IFS="$odl_ifs"
     COLUMNS="$old_columns"
 }
@@ -43,14 +41,13 @@ get_available_iwctl_networks() {
                 for(j=2;j<=NF-2;j++) {
                     printf " %s",$j;
                 }
-		print "";
+                print "";
             }
         }
     }')"
     echo "$networks"
 }
 
-# Retrives all available disks
 get_available_disks() {
     local disks="$( \
         fdisk -l | \
@@ -58,7 +55,7 @@ get_available_disks() {
             $2~/\/dev\// {printf "%s%s%s",$2,$3,$4;}
             $2~/model/ {
                 printf $3;
-	       	for(i=4;i<=NF;i++) {
+    	       	for(i=4;i<=NF;i++) {
                     printf " %s",$i; 
                 }
                 print "";
@@ -112,7 +109,6 @@ efi_section_end=$(($disk_start+$efi_section_size))
 
 total_memory_GB=$(($(cat /proc/meminfo | awk '$1 ~/MemTotal/ {print$2}') / 1000000))
 
-
 #https://askubuntu.com/questions/49109/i-have-16gb-ram-do-i-need-32gb-swap
 swap_section_size=$(echo "x=l(sqrt(${total_memory_GB}))/l(2); scale=0; 2^((x+0.5)/1)" | bc -l)
 
@@ -147,11 +143,11 @@ mkfs.ext4 "$root_part" && echo
 # Mount the file systems
 
 root_mnt=/mnt
-mount "$root_part" "$root_mnt" && echo
+mount "$root_part" "$root_mnt"
 
 efi_mnt=/mnt/efi
 mkdir "$efi_mnt"
-mount "$efi_part" "$efi_mnt" && echo
+mount "$efi_part" "$efi_mnt"
 
 swapon "$swap_part"
 
@@ -175,12 +171,12 @@ genfstab -U "$root_mnt" >> "$root_mnt/etc/fstab"
 # todo: error handling. If the user writes a bad name, let them choose another one.
 # 	hard to implement, since once the chroot script starts, stdout stop working?
 read -p "What will be your hostname?: " hostname && echo
-read -p "What will be your main user name? (Leave blank to cancel): " username && echo
+read -p "What will be your main user name? (Leave blank to skip): " username && echo
 
-# Creating a new file and running it through chroot will actually be prompted.
-chroot_script_name="chrootrc"
-chroot_script_path="${root_mnt}/${chroot_script_name}"
-cat <<CHROOT_SCRIPT > "$chroot_script_path"
+# Creating a new file and running it through chroot will run on interactive mode.
+chroot_script_rel_path="/chrootrc"
+chroot_script_full_path="${root_mnt}${chroot_script_rel_path}"
+cat <<CHROOT_SCRIPT > "$chroot_script_full_path"
 # Time zone
 
 # todo: let the user decide their zoneinfo.
@@ -247,9 +243,9 @@ CHROOT_SCRIPT
 
 # Chroot
 
-chmod 0755 "$chroot_script_path"
-arch-chroot "$root_mnt" "/$chroot_script_name"
-rm "$chroot_script_path"
+chmod 0755 "$chroot_script_full_path"
+arch-chroot "$root_mnt" "$chroot_script_rel_path"
+rm "$chroot_script_full_path"
 
 
 # Reboot
