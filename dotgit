@@ -17,7 +17,7 @@ git "$@" 2> "$StderrGitOutputPath"
 StderrGitOutput=$(cat "$StderrGitOutputPath")
 
 if [ "$StderrGitOutput" != "${StderrGitOutput#*ot a git repository}" ]; then
-    if [ SuppressDotfilesEcho = 'False' ]; then
+    if [ $SuppressDotfilesEcho = 'False' ]; then
         echo "Not a git repository... perfoming action on dotfiles."
     fi
     dtfs "$@"
