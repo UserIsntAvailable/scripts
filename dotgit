@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# Git wrapper to handle both my git repos, and my dotfiles repo.
+
+# todo: git commands autocomplete.
+# fix: git clone doenst show output. ( I don't think I can do anything about that )
+
+SuppressDotfilesEcho='False'
+if [ "$1" = '-s' ]; then
+    SuppressDotfilesEcho='True'
+    shift
+fi
+
+StderrGitOutputPath=$XDG_RUNTIME_DIR/git_wrapper
+git "$@" 2> "$StderrGitOutputPath"
+
+StderrGitOutput=$(cat "$StderrGitOutputPath")
+
+if [ "$StderrGitOutput" != "${StderrGitOutput#*ot a git repository}" ]; then
+    if [ SuppressDotfilesEcho = 'False' ]; then
+        echo "Not a git repository... perfoming action on dotfiles."
+    fi
+    dtfs "$@"
+else
+    [ -n "$StderrGitOutput" ] && echo "$StderrGitOutput" 1>&2
+    exit 1
+fi
