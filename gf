@@ -6,12 +6,14 @@
 # I will just recommend to create an alias/keybind.
 
 FzfToFile() {
-    local File=$1
+    File=$1
 
     # It would be a problem if we are in ./, but
     # calling this script in the same folder were the file is located is silly
-    cd ${${File}%/*} 
-    "$EDITOR" "$File"
+    cd "${File%/*}"
+    $EDITOR "$File"
+
+    unset File
 }
 
 if [ "$1" = '-' ]; then
@@ -26,7 +28,7 @@ fi
 
 BaseDir=$1
 
-File=$(fd -tf -tl -H --exclude .git . ${BaseDir:-$HOME} | fzf -i +m --black)
+File=$(fd -tf -tl -H --exclude .git . "${BaseDir:-$HOME}" | fzf -i +m --black)
 if [ -r "$File" ]; then
     export _GF_LAST_FILE_VISITED="$File"
     FzfToFile "$File"

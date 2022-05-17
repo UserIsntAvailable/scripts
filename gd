@@ -6,7 +6,7 @@
 
 BaseDir=$1
 
-Dir=$(fd -td -H --exclude .git . ${BaseDir:-$HOME} | fzf -i +m --black)
+Dir=$(fd -td -H --exclude .git . "${BaseDir:-$HOME}" | fzf -i +m --black)
 if [ -d "$Dir" ]; then
     cd "$Dir"
 fi
