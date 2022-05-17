@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Cd `up` an x amount of folders
+
+# notes: keep in mind that if you want to see the effect of cd you need to source the file.
+
+Amount=${1:-1}
+
+if ((Amount <= 0)); then
+    printf "You can't cd up %s times\n" $Amount 1>&2
+    return 1
+fi
+
+for ((I = 1; I <= Amount; I++)); do
+    Level+=../
+done
+
+cd $Level
