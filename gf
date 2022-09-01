@@ -33,3 +33,5 @@ if [ -r "$File" ]; then
     export _GF_LAST_FILE_VISITED="$File"
     FzfToFile "$File"
 fi
+
+unset BaseDir

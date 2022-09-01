@@ -16,3 +16,6 @@ for ((I = 1; I <= Amount; I++)); do
 done
 
 cd $Level
+
+unset Amount
+unset Level
