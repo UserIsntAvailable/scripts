@@ -10,11 +10,11 @@
 import getpass
 import re
 import sys
-from subprocess import call
-from subprocess import check_output
-from subprocess import STDOUT as S_STDOUT
+import subprocess
+from time import sleep
 from typing import NewType
 from typing import Optional
+from typing import Iterable
 
 # ----------------------------------- Types -----------------------------------
 
@@ -22,16 +22,21 @@ Err = NewType('Err', str)
 
 # ----------------------------- Utility Functions -----------------------------
 
-def check(args: Iterable[str]) -> bytes:
-    return subprocess.check_output(args, stderr=S_STDOUT)
+def call() -> Optional[Err]:
+    if subprocess.call(args) != 0:
+        return Err(f"subprocess( {' '.join(args)} )")
 
-# TODO: Add error handling later. ( I don't know if there is a builtin way of 
+# TODO: Throws if -1. Add error handling later.
+def check(*args) -> bytes:
+    return subprocess.check_output(args, stderr=subprocess.STDOUT)
+
+# TODO: Add error handling later. ( I don't know if there is a builtin way of
 # doing this on python. )
-def select(choices: list[str]) -> str:
+def select(choices: Iterable[str]) -> str:
     for i, choice in enumerate(choices):
         print(f"{i}) {choice}")
 
-    return input("?# ")
+    return choices[int(input("?# "))]
 
 IWCTL_SEPARATOR = " "
 NO_AVAILABLE_PATTERN = re.compile("^No (.+) Available")
@@ -50,9 +55,12 @@ def parse_iwctl_output(
     # spaces and the iwctl column separator is also spaces ( WHY? ), I need to
     # substract the values from the others columns.
 
+    # #ILoveListComprehensionsDontAtMe
     return [
-        IWCTL_SEPARATOR.join(split[:len(split) - columns - 1]) for split in
-        [line.split(IWCTL_SEPARATOR) for line in output_lines]
+        IWCTL_SEPARATOR.join(split[:-(len(split) - columns - 1)]) for split in [
+            [item for item in split if item != ""] for split in
+            [line.strip().split(IWCTL_SEPARATOR) for line in output_lines]
+        ]
     ]
 
 # ----------------------------- Section Functions -----------------------------
@@ -60,7 +68,7 @@ def parse_iwctl_output(
 def iwctl() -> Optional[Err]:
     IWCTL="iwctl"
 
-    match parse_iwctl_output(check((IWCTL, "device", "list")), 5):
+    match parse_iwctl_output(check(IWCTL, "device", "list"), 5):
         case [*devices]:
             match devices:
                 case [dev]:
@@ -74,7 +82,7 @@ def iwctl() -> Optional[Err]:
 
     call(IWCTL, "station", device, "scan")
 
-    networks_output=check((IWCTL, "station", device, "get-networks", "rssi-dbms"))
+    networks_output=check(IWCTL, "station", device, "get-networks", "rssi-dbms")
     match parse_iwctl_output(networks_output, 3):
         case [*networks]:
             print("Select what network you want to use?")
@@ -87,7 +95,7 @@ def iwctl() -> Optional[Err]:
     call(IWCTL, "--passphrase", passphrase, "station", device, "connect", ssid)
 
     sleep(3)
-    call("ping", "-c", "4", "archlinux.org")
+    return call("ping", "-c", "4", "archlinux.org")
 
 # ------------------------------------ Main -----------------------------------
 
@@ -99,6 +107,7 @@ def main(argc: int, argv: list[str]) -> int:
     # TODO: Print each section name?
     for section in sections:
         if (error:=section()) is not None:
+            # TODO: Pretty print error.
             print(error, file=sys.stderr)
             return -1
 
