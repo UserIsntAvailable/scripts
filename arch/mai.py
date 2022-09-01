@@ -8,8 +8,8 @@
 # to change)
 
 import getpass
-import sys
 import re
+import sys
 from subprocess import call
 from subprocess import check_output
 from subprocess import STDOUT as S_STDOUT
@@ -25,8 +25,13 @@ Err = NewType('Err', str)
 def check(args: Iterable[str]) -> bytes:
     return subprocess.check_output(args, stderr=S_STDOUT)
 
+# TODO: Add error handling later. ( I don't know if there is a builtin way of 
+# doing this on python. )
 def select(choices: list[str]) -> str:
-    pass
+    for i, choice in enumerate(choices):
+        print(f"{i}) {choice}")
+
+    return input("?# ")
 
 IWCTL_SEPARATOR = " "
 NO_AVAILABLE_PATTERN = re.compile("^No (.+) Available")
