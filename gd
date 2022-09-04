@@ -1,8 +1,9 @@
 #!/bin/sh
 
-# Go to a directory
+# Go (cd) to a directory
 
-# notes: keep in mind that if you want to see the effect of cd you need to source the file.
+# notes: keep in mind that if you want to see the effect of cd you need to
+# source the file.
 
 BaseDir=$1
 
@@ -11,4 +12,5 @@ if [ -d "$Dir" ]; then
     cd "$Dir"
 fi
 
+unset BaseDir
 unset Dir
