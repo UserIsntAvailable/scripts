@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Prints a Centered HEADer to `stdout`. i.e: the header bellow
+# Prints a Centered HEADer. i.e: the header bellow
 
 # Dependencies:
 # rev
@@ -11,6 +11,7 @@ set -euo pipefail
 
 Usage()
 {
+    # TODO: Maybe rethink names of flags?
     while read; do
         printf '%s\n' "$REPLY"
     done <<- EOF
@@ -105,6 +106,7 @@ if [[ $MirrorStart == true ]]; then
     StartCharCount=$((${#StartChar} * 2))
 fi
 
+# TODO: Add better error message ( include the actual inputs ).
 ((${#HeaderText} + $StartCharCount + ${#PaddingChar} * 2 > $MaxLength)) &&
     Err 1 "The combination of all inputs is higher than '$MaxLength'"
 
@@ -125,8 +127,9 @@ done
 printf -v Result "%s%s%s%s" "$StartChar" "$Padding" "$HeaderText" "$Padding"
 
 # TODO: Rename MAX_LENGTH to TARGET_LENGTH, and if string doesn't equal to
-# TARGET_LENGTH, by now, truncate the input up to TARGET_LENGTH characters. I
-# could also just add a new flag to achive that instead.
+# TARGET_LENGTH, repeat 'PADDING' until 'Result' >= TARGET_LENGTH, then
+# truncate it if bigger. I could also just add a new flag to achieve that
+# instead, and keep both behaviours.
 
 if [[ $MirrorStart == true ]]; then
     printf "%s%s\n" "$Result" "$(rev <<< "$StartChar")"
