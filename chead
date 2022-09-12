@@ -1,0 +1,135 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Prints a Centered HEADer to `stdout`. i.e: the header bellow
+
+# Dependencies:
+# rev
+
+# -------------------------------- Functions -------------------------------- #
+
+Usage()
+{
+    while read; do
+        printf '%s\n' "$REPLY"
+    done <<- EOF
+        Usage: chead [OPTS] TEXT
+
+          -h, --help              - Display this help information.
+          -e, --mirror-start      - If 'start-char' should be mirror to the end.
+          -l N, --max-length=N    - The max length of the header. (DEFAULT: 80)
+          -m, --margin            - If the entries should have a ' ' as margin.
+          -p c, --padding=<char>  - The character(s) used as padding. (DEFAULT: -)
+          -s c, --start=<char>    - The character(s) that starts the header. (DEFAULT: #)
+
+        The use of '--' to ignore proceeding options is supported.
+	EOF
+}
+
+Err()
+{
+    printf "Err: %s\n" "$2" 1>&2
+    (($1 > 0)) && exit $1
+}
+
+IsDigit()
+{
+    [[ $2 =~ ^[[:digit:]]+$ ]] || Err 1 "Option '$1' requires an positive integer."
+}
+
+# ----------------------------- Input Processing ----------------------------- #
+
+(($# == 0)) && Err 1 "Argument(s) required."
+
+MirrorStart=false
+MaxLength=80
+Margin=false
+PaddingChar="-"
+StartChar="#"
+
+while [[ -n $1 ]]; do
+    case $1 in
+        --) break ;;
+        --help | -h)
+            Usage
+            exit 0
+            ;;
+
+        --mirror-start | -e) MirrorStart=true ;;
+
+        --max-length=*)
+            IsDigit "${1%%=*}" "${1#*=}"
+            MaxLength=${1#*=}
+            ;;
+        -l)
+            IsDigit "$1" "$2"
+            MaxLength=$2
+            shift
+            ;;
+
+        --margin | -m) Margin=true ;;
+
+        --start-char=*) StartChar="${1#*=}" ;;
+        -s)
+            StartChar="$2"
+            shift
+            ;;
+
+        --padding-char=*) PaddingChar="${1#*=}" ;;
+        -p)
+            PaddingChar="$2"
+            shift
+            ;;
+
+        -*) Err 1 "Incorrect option(s) specified." ;;
+        *) break ;;
+    esac
+    shift
+done
+
+[[ -z $PaddingChar ]] && Err 1 "The character used as padding cannot be empty."
+
+HeaderText=$1
+
+[[ -z $HeaderText ]] && Err 1 "Header TEXT is required."
+
+if [[ $Margin == true ]]; then
+    StartChar="$StartChar "
+    HeaderText=" $HeaderText "
+fi
+
+StartCharCount=${#StartChar}
+
+if [[ $MirrorStart == true ]]; then
+    StartCharCount=$((${#StartChar} * 2))
+fi
+
+((${#HeaderText} + $StartCharCount + ${#PaddingChar} * 2 > $MaxLength)) &&
+    Err 1 "The combination of all inputs is higher than '$MaxLength'"
+
+# ----------------------------------- Main ----------------------------------- #
+
+PaddingLength=$(($MaxLength - ${#HeaderText} - ${#StartChar}))
+
+if [[ $MirrorStart == true ]]; then
+    PaddingLength=$(($PaddingLength - ${#StartChar}))
+fi
+
+PaddingLength=$(($PaddingLength / 2 / ${#PaddingChar} - 1))
+
+for ((I = 0; I <= PaddingLength; I++)); do
+    Padding+="$PaddingChar"
+done
+
+printf -v Result "%s%s%s%s" "$StartChar" "$Padding" "$HeaderText" "$Padding"
+
+# TODO: Rename MAX_LENGTH to TARGET_LENGTH, and if string doesn't equal to
+# TARGET_LENGTH, by now, truncate the input up to TARGET_LENGTH characters. I
+# could also just add a new flag to achive that instead.
+
+if [[ $MirrorStart == true ]]; then
+    printf "%s%s\n" "$Result" "$(rev <<< "$StartChar")"
+else
+    echo "$Result"
+fi
