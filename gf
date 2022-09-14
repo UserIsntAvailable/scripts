@@ -34,6 +34,7 @@ Usage()
 
 UnsetVars()
 {
+    unset BaseDir
     unset File
 }
 
@@ -70,7 +71,11 @@ case "$1" in
         ;;
 esac
 
-File=$(fd -tf -tl -H --exclude .git . "${1:-$HOME}" | fzf -i +m --black)
+BaseDir="${1:-$HOME}"
+
+[[ -d "$BaseDir" ]] || return $(Err 1 "Directory '$BaseDir' doesn't exists.")
+
+File=$(fd -tf -tl -H --exclude .git . "$BaseDir" | fzf -i +m --black)
 
 [[ -r "$File" ]] || return $(Err 1 "File '$File' is not readable.")
 
