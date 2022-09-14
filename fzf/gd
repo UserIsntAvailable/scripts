@@ -1,30 +1,31 @@
 #!/bin/bash
 
-# `cd` to a directory.
+# Fuzzy find a directory, then cd to it.
 
 # Notes:
 # Keep in mind that if you want to see the effect of cd you need to
-# source the file.
+# source the script.
 
 # Dependecies:
 # fd
 # fzf
-
-# TODO: Add flag to print full path of the directory when using -p.
+# realpath
 
 # -------------------------------- Functions -------------------------------- #
 
 Usage()
 {
-    while read; do
+    while read -r; do
         printf "%s\n" "$REPLY"
     done <<- EOF
         Usage: gd [OPTS] [BASEDIR]
 
-          -h, --help    - Display this help information.
-          -p, --print   - Print the selected directory instead of 'cd'ing into it.
+          -h, --help     - Display this help information.
+          -a, --absolute - Prints the absolute path of the directory.
+          -r, --relative - Prints the relative path of the directory.
 
         If called without arguments, BASEDIR will be the user's 'HOME'.
+        If '-a' and '-r' are both being used, the program will use the last set.
 	EOF
 }
 
@@ -45,25 +46,27 @@ Err()
 
 # ----------------------------- Input Processing ----------------------------- #
 
-(($# > 2)) && return $(Err 1 "Too many arguments.")
+(($# > 3)) && return $(Err 1 "Too many arguments.")
 
 Command="cd"
 
-case "$1" in
-    --help | -h)
-        Usage
-        return 0
-        ;;
-    --print | -p)
-        Command="echo"
-        shift
-        ;;
-    -*) return $(Err 1 "Incorrect option(s) specified.") ;;
-esac
+while [[ -n $1 ]]; do
+    case $1 in
+        --help | -h)
+            Usage
+            return 0
+            ;;
+        --absolute | -a) Command="realpath" ;;
+        --relative | -r) Command="echo" ;;
+        -*) return $(Err 1 "Incorrect option(s) specified.") ;;
+        *) break ;;
+    esac
+    shift
+done
 
 BaseDir="${1:-$HOME}"
 
-[[ -d "$BaseDir" ]] || return $(Err 1 "Directory '$BaseDir' doesn't exists.")
+[[ -d $BaseDir ]] || return $(Err 1 "Directory '$BaseDir' doesn't exists.")
 
 # ----------------------------------- Main ----------------------------------- #
 

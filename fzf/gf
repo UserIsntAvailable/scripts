@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# Fuzzy find a file from $HOME, move to that file directory, and then opens it
-# on $EDITOR.
+# Fuzzy find a file, move to that file directory, and then opens it on $EDITOR.
 
 # Notes:
 # Keep in mind that if you want to cd automatically to the file you need to
@@ -20,7 +19,7 @@
 
 Usage()
 {
-    while read; do
+    while read -r; do
         printf "%s\n" "$REPLY"
     done <<- EOF
         Usage: gf [BASEDIR]
@@ -57,7 +56,7 @@ FzfToFile()
 
 (($# > 1)) && return $(Err 1 "Too many arguments.")
 
-case "$1" in
+case $1 in
     --help | -h)
         Usage
         return 0
@@ -73,11 +72,11 @@ esac
 
 BaseDir="${1:-$HOME}"
 
-[[ -d "$BaseDir" ]] || return $(Err 1 "Directory '$BaseDir' doesn't exists.")
+[[ -d $BaseDir ]] || return $(Err 1 "Directory '$BaseDir' doesn't exists.")
 
 File=$(fd -tf -tl -H --exclude .git . "$BaseDir" | fzf -i +m --black)
 
-[[ -r "$File" ]] || return $(Err 1 "File '$File' is not readable.")
+[[ -r $File ]] || return $(Err 1 "File '$File' is not readable.")
 
 # ----------------------------------- Main ----------------------------------- #
 
