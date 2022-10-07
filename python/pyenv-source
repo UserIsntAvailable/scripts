@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# I refuse to make `pyenv` sourcable, so source this file to actually activate
+# or deactivate the virtual environment. This takes the exactly same parameters
+# that pyenv does. You can alias this script to `pyenv` safetely.
+
+# shellcheck disable=1090
+
+PyEnvOut=$(\pyenv "$@")
+
+FirstLine="${PyEnvOut%%$'\n'*}"
+Command="${FirstLine:0:10}"
+VirtualEnv="${FirstLine:12}"
+
+if [[ $Command == Activate* ]]; then
+    . "$VirtualEnv"
+elif [[ $Command == "Deactivate" ]]; then
+    . "$VirtualEnv"
+    deactivate
+else
+    echo "$PyEnvOut"
+fi
+
+unset Command
+unset PyEnvOut
+unset VirtualEnv

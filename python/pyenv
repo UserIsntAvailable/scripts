@@ -3,9 +3,9 @@
 set -euo pipefail
 
 # Creates, activates or deactivates `python`s virtual environments. If you want
-# to use the `activate` functionality, use `pyenv-activate` instead. If you call
-# this script with `-t` expecting to activate the virtual environment, you will 
-# get the instead the path of the actual virtual environment ( which can also be
+# to use the `activate` functionality, use `pyenv-source` instead. If you call
+# this script with `-t` expecting to activate the virtual environment, you will
+# get instead the path of the actual virtual environment ( which can also be
 # useful if you do something like `. "$(pyenv -t)"` ).
 
 # Dependencies:
@@ -84,22 +84,32 @@ Err()
     (($1 > 0)) && exit $1
 }
 
-ActivateEnvironment()
+GetVenv()
 {
     local VenvDir=$1
 
-    # I don't think that this script could work in Windows. So... I hard coding
-    # the `activate` script path. Also using `activate` as default, because
-    # couldn't bother less to create a case statement just for available shells.
+    # I don't think that this script could work in Windows. So... I'm hard
+    # coding the `activate` script path. Also using `activate` as default,
+    # because couldn't bother less to create a case statement just for
+    # available shells.
 
     echo "$VenvDir/bin/activate"
+}
+
+ActivateEnvironment()
+{
+    echo "Activate  : $(GetVenv "$1")"
+}
+
+DeactivateEnvironment()
+{
+    echo "Deactivate: $(GetVenv "$1")"
 }
 
 # ----------------------------- Input Processing ----------------------------- #
 
 (($# == 0)) && Err 1 "Argument(s) required."
 
-ActivateStatusCode=3
 Toggle=false
 VenvDst=""
 IFS="," read -ra VenvPatterns <<< "${PYENV_ENV_DIR_PATTERNS:-".venv,venv,.env,env"}"
@@ -137,12 +147,6 @@ fi
 # ----------------------------------- Main ----------------------------------- #
 
 if [[ $Toggle == true ]] && [[ -z $VenvDst ]]; then
-    # Activated
-    if [[ -n ${VIRTUAL_ENV:-} ]]; then
-        deactivate
-        exit 0
-    fi
-
     for VenvPattern in "${VenvPatterns[@]}"; do
         # https://github.com/sharkdp/fd/issues/731
         # [[
@@ -160,13 +164,21 @@ if [[ $Toggle == true ]] && [[ -z $VenvDst ]]; then
     [[ -z "$VenvDir" ]] && Err 1 "Virtual environment was not found.
 ( Make sure that your virtual environment name matches ${VenvPatterns[*]}. )"
 
-    ActivateEnvironment "$VenvDir"
+    if [[ -n ${VIRTUAL_ENV:-} ]]; then
+        # shellcheck disable=1090
 
-    exit $ActivateStatusCode
+        # Bash doesn't stop to surprise me. It would way more faster to call
+        # `deactivate` directly, but I to still keep this.
+        DeactivateEnvironment "$VenvDir"
+    else
+        ActivateEnvironment "$VenvDir"
+    fi
+
+    exit 0
 fi
 
 [[ -d $VenvDst ]] && [[ $AreVenvOptionsProvided == false ]] && Err 1 "Dir already exists."
 
 python -m "venv" "$@" "$VenvDst"
 
-[[ $Toggle == true ]] && ActivateEnvironment "$VenvDst" && exit $ActivateStatusCode
+[[ $Toggle == true ]] && ActivateEnvironment "$VenvDst" && exit 0
