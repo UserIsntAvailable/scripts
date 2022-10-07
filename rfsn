@@ -2,11 +2,10 @@
 
 set -euo pipefail
 
-# `Right File System Naming` renames files and directories to have an
+# `Right File System Naming` renames files and directories to have a
 # standardised way `for me =)` to name stuff.
 
 # Dependencies:
-# sed
 # mv
 
 # NOTE: There is no correlation that DT made a video about this.
