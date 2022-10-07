@@ -3,10 +3,10 @@
 set -euo pipefail
 
 # Creates, activates or deactivates `python`s virtual environments. If you want
-# to use the `activate` functionality, use `pyenv-source` instead. If you call
-# this script with `-t` expecting to activate the virtual environment, you will
-# get instead the path of the actual virtual environment ( which can also be
-# useful if you do something like `. "$(pyenv -t)"` ).
+# to use the `activate` or `deactivate` functionality, use `pyenv-source`
+# instead. If you call this script with `-t` expecting to activate the virtual
+# environment, you will get instead the path of the actual virtual environment
+# ( which can also be useful if you do something like `. "$(pyenv -t)"` ).
 
 # Dependencies:
 # python
@@ -68,7 +68,7 @@ $ pyenv -t
 - If there is **not** an activate virtual environment, the '$Program' will
 search for the 'activate' script. If there are multiple virtual environments in
 the current working directory, the script will take the first one that matches
-the ones on PYENV_VENV_DIR_PATTERNS.
+one of PYENV_VENV_DIR_PATTERNS.
 
 To change the 'python -m venv' options:
 '''
@@ -165,10 +165,8 @@ if [[ $Toggle == true ]] && [[ -z $VenvDst ]]; then
 ( Make sure that your virtual environment name matches ${VenvPatterns[*]}. )"
 
     if [[ -n ${VIRTUAL_ENV:-} ]]; then
-        # shellcheck disable=1090
-
         # Bash doesn't stop to surprise me. It would way more faster to call
-        # `deactivate` directly, but I to still keep this.
+        # `deactivate` directly, but I want to still keep this.
         DeactivateEnvironment "$VenvDir"
     else
         ActivateEnvironment "$VenvDir"
