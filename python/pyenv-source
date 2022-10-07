@@ -22,5 +22,6 @@ else
 fi
 
 unset Command
+unset FirstLine
 unset PyEnvOut
 unset VirtualEnv
