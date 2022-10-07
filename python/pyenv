@@ -1,0 +1,172 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Creates, activates or deactivates `python`s virtual environments. If you want
+# to use the `activate` functionality, use `pyenv-activate` instead. If you call
+# this script with `-t` expecting to activate the virtual environment, you will 
+# get the instead the path of the actual virtual environment ( which can also be
+# useful if you do something like `. "$(pyenv -t)"` ).
+
+# Dependencies:
+# python
+# fd
+# realpath
+
+# TODO: Be able to specify what venv to `activate` with `pyenv -t NAME`.
+# Technically easy to implement ( modify `VenvPatterns` ), but I don't want to
+# test that edge case now.
+#
+# TODO: Verbose flag.
+
+# -------------------------------- Functions -------------------------------- #
+
+Usage()
+{
+    local Program="pyenv"
+
+    while read -r; do
+        printf '%s\n' "$REPLY"
+    done <<- EOF
+Usage: $Program [OPTS] ENV_DST
+
+  -h, --help            - Display this help information.
+  -t, --toggle          - Toggle virtual environment.
+
+Unlike 'python -m venv', you can only pass 1 virtual environment name at a time.
+
+Use '--' to start ignoring '$Program' options and instead pass them to the
+underlying 'python -m venv' process.
+
+Environment Variables:
+    
+    PYENV_ENV_DIR_PATTERNS: Comma separated directory names that will be search
+    until '/' to find virtual environment directories. Defaults to .venv,venv,
+    .env,env.
+
+Examples:
+
+To create a virtual environment:
+'''
+$ pyenv .venv
+'''
+
+To create, and activate a virtual environment:
+'''
+$ pyenv -t venv
+'''
+
+- If the virtual environment already exists, and '--' was not provided the
+script will give an 'Dir already exists' error. Of course, you could just write
+'$Program -t .venv --' to force '$Program' to reuse the virtual environment.
+
+To toggle (activate/deactivate) a virtual environment.
+'''
+$ pyenv -t
+'''
+
+- If there is **not** an activate virtual environment, the '$Program' will
+search for the 'activate' script. If there are multiple virtual environments in
+the current working directory, the script will take the first one that matches
+the ones on PYENV_VENV_DIR_PATTERNS.
+
+To change the 'python -m venv' options:
+'''
+$ pyenv -t .env -- --without-pip
+'''
+	EOF
+}
+
+Err()
+{
+    printf "Err: %s\n" "$2" 1>&2
+    # shellcheck disable=2086
+    (($1 > 0)) && exit $1
+}
+
+ActivateEnvironment()
+{
+    local VenvDir=$1
+
+    # I don't think that this script could work in Windows. So... I hard coding
+    # the `activate` script path. Also using `activate` as default, because
+    # couldn't bother less to create a case statement just for available shells.
+
+    echo "$VenvDir/bin/activate"
+}
+
+# ----------------------------- Input Processing ----------------------------- #
+
+(($# == 0)) && Err 1 "Argument(s) required."
+
+ActivateStatusCode=3
+Toggle=false
+VenvDst=""
+IFS="," read -ra VenvPatterns <<< "${PYENV_ENV_DIR_PATTERNS:-".venv,venv,.env,env"}"
+
+while [[ -n ${1:-} ]]; do
+    case $1 in
+        --) break ;;
+        --help | -h)
+            Usage
+            exit 0
+            ;;
+        --toggle | -t) Toggle=true ;;
+        -*) Err 1 "Incorrect option(s) specified." ;;
+        *)
+            VenvDst="$1"
+            shift
+            break
+            ;;
+    esac
+    shift
+done
+
+AreVenvOptionsProvided=false
+
+if [[ -n ${1:-} ]]; then
+    if [[ $1 == "--" ]]; then
+        # Removes the '--' from "$@".
+        shift
+        AreVenvOptionsProvided=true
+    else
+        Err 1 "Too many arguments."
+    fi
+fi
+
+# ----------------------------------- Main ----------------------------------- #
+
+if [[ $Toggle == true ]] && [[ -z $VenvDst ]]; then
+    # Activated
+    if [[ -n ${VIRTUAL_ENV:-} ]]; then
+        deactivate
+        exit 0
+    fi
+
+    for VenvPattern in "${VenvPatterns[@]}"; do
+        # https://github.com/sharkdp/fd/issues/731
+        # [[
+        Path="$PWD"
+        while [[ $(realpath "$Path") != / ]]; do
+            VenvDir=$(fd --search-path="$Path" --absolute-path --exact-depth=1 -H "$VenvPattern")
+            [[ -n "$VenvDir" ]] && break
+            Path=$(realpath --relative-to="$PWD" "$Path"/..)
+        done
+        # ]]
+
+        [[ -n "$VenvDir" ]] && break
+    done
+
+    [[ -z "$VenvDir" ]] && Err 1 "Virtual environment was not found.
+( Make sure that your virtual environment name matches ${VenvPatterns[*]}. )"
+
+    ActivateEnvironment "$VenvDir"
+
+    exit $ActivateStatusCode
+fi
+
+[[ -d $VenvDst ]] && [[ $AreVenvOptionsProvided == false ]] && Err 1 "Dir already exists."
+
+python -m "venv" "$@" "$VenvDst"
+
+[[ $Toggle == true ]] && ActivateEnvironment "$VenvDst" && exit $ActivateStatusCode
