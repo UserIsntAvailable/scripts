@@ -1,0 +1,110 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# `Right File System Naming` renames files and directories to have an
+# standardised way `for me =)` to name stuff.
+
+# Dependencies:
+# sed
+# mv
+
+# NOTE: There is no correlation that DT made a video about this.
+#
+# NOTE: Was planning to call it `rn`, but the last thing that I want is to
+# mistyped with `rm` :/.
+
+# -------------------------------- Functions -------------------------------- #
+
+Usage()
+{
+    while read -r; do
+        printf '%s\n' "$REPLY"
+    done <<-EOF
+Usage: rfsn [OPTS] FILES_OR_DIRS
+
+  -h, --help                 - Display this help information.
+  -f, --force                - Force the file renaming (default). Overrides '-i'
+  -H, --force-hyphen         - Replaces ' ' and '_' with '-'.
+  -i, --interactive          - Prompts before any action.
+  -U, --force-underscore     - Replaces ' ' and '-' with '_'.
+
+The use of '--' to ignore proceeding options is supported.
+	EOF
+}
+
+Err()
+{
+    printf "Err: %s\n" "$2" 1>&2
+    # shellcheck disable=2086
+    (($1 > 0)) && exit $1
+}
+
+# ----------------------------- Input Processing ----------------------------- #
+
+(($# == 0)) && Err 1 "Arguments(s) required."
+
+Sep="-"
+ForceHyphen=false
+ForceUnderscore=false
+Interactive=false
+Force=true
+
+while [[ -n $1 ]]; do
+    case $1 in
+        --) break ;;
+        --help | -h)
+            Usage
+            exit 0
+            ;;
+        --force | -f)
+            Force=true
+            ;;
+        --force-hyphen | -H)
+            Sep="-"
+            ForceHyphen=true
+            ;;
+        --interactive | -i)
+            Interactive=true
+            Force=false
+            ;;
+        --force-underscore | -U)
+            Sep="_"
+            ForceUnderscore=true
+            ;;
+        -*) Err 1 "Incorrect option(s) specified." ;;
+        *) break ;;
+    esac
+    shift
+done
+
+# ----------------------------------- Main ----------------------------------- #
+
+# Based from get_valid_filename @ https://github.com/django/django/blob/main/django/utils/text.py
+for Argument in "$@"; do
+    ArgumentCopy=$Argument
+
+    Argument=${Argument,,}
+    Argument=${Argument/" "/$Sep}
+    Argument=${Argument/":"/"-"}
+
+    if [[ $ForceUnderscore == true ]]; then
+        Argument=${Argument/"-"/$Sep}
+    elif [[ $ForceHyphen == true ]]; then
+        Argument=${Argument/"_"/$Sep}
+    fi
+
+    Argument=${Argument//[^a-z0-9._-]/}
+
+    [[ -z $Argument ]] || [[ $Argument == "." ]] || [[ $Argument == ".." ]] \
+        && Err 1 "Could not derive file name from '$Argument'."
+
+    if [[ $Force == false ]] && [[ $Interactive == true ]]; then
+        read -rp "Are you sure that you want to rename $ArgumentCopy to $Argument? (y/N) "
+
+        [[ $REPLY =~ ^[Yy] ]] || return 0
+    fi
+
+    # Using `-i` just in case.
+    mv -i "$ArgumentCopy" "$Argument"
+done
