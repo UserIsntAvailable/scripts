@@ -81,29 +81,32 @@ done
 
 # Based from get_valid_filename @ https://github.com/django/django/blob/main/django/utils/text.py
 for Argument in "$@"; do
-    ArgumentCopy=$Argument
+    Source=$Argument
+    ArgumentDir=${Argument%/*}
 
-    Argument=${Argument,,}
-    Argument=${Argument/" "/$Sep}
-    Argument=${Argument/":"/"-"}
+    BaseName=${Argument##*/}
+    BaseName=${BaseName,,}
+    BaseName=${BaseName/" "/$Sep}
+    BaseName=${BaseName/":"/"-"}
 
     if [[ $ForceUnderscore == true ]]; then
-        Argument=${Argument/"-"/$Sep}
+        BaseName=${BaseName/"-"/$Sep}
     elif [[ $ForceHyphen == true ]]; then
-        Argument=${Argument/"_"/$Sep}
+        BaseName=${BaseName/"_"/$Sep}
     fi
 
-    Argument=${Argument//[^a-z0-9._-]/}
+    BaseName=${BaseName//[^a-z0-9._-]/}
+    Destination="$ArgumentDir/$BaseName"
 
-    [[ -z $Argument ]] || [[ $Argument == "." ]] || [[ $Argument == ".." ]] \
-        && Err 1 "Could not derive file name from '$Argument'."
+    [[ -z $BaseName ]] || [[ $BaseName == "." ]] || [[ $BaseName == ".." ]] \
+        && Err 1 "Could not derive file name from '$BaseName'."
 
     if [[ $Force == false ]] && [[ $Interactive == true ]]; then
-        read -rp "Are you sure that you want to rename $ArgumentCopy to $Argument? (y/N) "
+        read -rp "Are you sure that you want to rename $Source to $Destination? (y/N) "
 
         [[ $REPLY =~ ^[Yy] ]] || return 0
     fi
 
     # Using `-i` just in case.
-    mv -i "$ArgumentCopy" "$Argument"
+    mv -i "$Source" "$Destination"
 done
