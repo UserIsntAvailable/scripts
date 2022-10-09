@@ -8,20 +8,22 @@
 
 PyEnvOut=$(\pyenv "$@")
 
-FirstLine="${PyEnvOut%%$'\n'*}"
-Command="${FirstLine:0:10}"
-VirtualEnv="${FirstLine:12}"
+if [[ -n "$PyEnvOut" ]]; then
+    FirstLine="${PyEnvOut%%$'\n'*}"
+    Command="${FirstLine:0:10}"
+    VirtualEnv="${FirstLine:12}"
 
-if [[ $Command == Activate* ]]; then
-    . "$VirtualEnv"
-elif [[ $Command == "Deactivate" ]]; then
-    . "$VirtualEnv"
-    deactivate
-else
-    echo "$PyEnvOut"
+    if [[ $Command == Activate* ]]; then
+        . "$VirtualEnv"
+    elif [[ $Command == "Deactivate" ]]; then
+        . "$VirtualEnv"
+        deactivate
+    else
+        echo "$PyEnvOut"
+    fi
 fi
 
-unset Command
-unset FirstLine
 unset PyEnvOut
+unset FirstLine
+unset Command
 unset VirtualEnv

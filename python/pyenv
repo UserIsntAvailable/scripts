@@ -27,7 +27,7 @@ Usage()
 
     while read -r; do
         printf '%s\n' "$REPLY"
-    done <<- EOF
+    done <<-EOF
 Usage: $Program [OPTS] ENV_DST
 
   -h, --help            - Display this help information.
@@ -58,7 +58,7 @@ $ pyenv -t venv
 
 - If the virtual environment already exists, and '--' was not provided the
 script will give an 'Dir already exists' error. Of course, you could just write
-'$Program -t .venv --' to force '$Program' to reuse the virtual environment.
+'$Program -t .venv --' to force '$Program' to update the virtual environment.
 
 To toggle (activate/deactivate) a virtual environment.
 '''
@@ -112,7 +112,7 @@ DeactivateEnvironment()
 
 Toggle=false
 VenvDst=""
-IFS="," read -ra VenvPatterns <<< "${PYENV_ENV_DIR_PATTERNS:-".venv,venv,.env,env"}"
+IFS="," read -ra VenvPatterns <<<"${PYENV_ENV_DIR_PATTERNS:-".venv,venv,.env,env"}"
 
 while [[ -n ${1:-} ]]; do
     case $1 in
@@ -148,11 +148,10 @@ fi
 
 if [[ $Toggle == true ]] && [[ -z $VenvDst ]]; then
     for VenvPattern in "${VenvPatterns[@]}"; do
-        # https://github.com/sharkdp/fd/issues/731
-        # [[
+        # https://github.com/sharkdp/fd/issues/731 [[
         Path="$PWD"
         while [[ $(realpath "$Path") != / ]]; do
-            VenvDir=$(fd --search-path="$Path" --absolute-path --exact-depth=1 -H "$VenvPattern")
+            VenvDir=$(fd --search-path="$Path" --exact-depth=1 -HIa "$VenvPattern")
             [[ -n "$VenvDir" ]] && break
             Path=$(realpath --relative-to="$PWD" "$Path"/..)
         done
@@ -162,7 +161,7 @@ if [[ $Toggle == true ]] && [[ -z $VenvDst ]]; then
     done
 
     [[ -z "$VenvDir" ]] && Err 1 "Virtual environment was not found.
-( Make sure that your virtual environment name matches ${VenvPatterns[*]}. )"
+( Make sure that your virtual environment name matches '${VenvPatterns[*]}'. )"
 
     if [[ -n ${VIRTUAL_ENV:-} ]]; then
         # Bash doesn't stop to surprise me. It would way more faster to call
