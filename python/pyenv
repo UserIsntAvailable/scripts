@@ -18,6 +18,8 @@ set -euo pipefail
 # test that edge case now.
 #
 # TODO: Verbose flag.
+#
+# TODO: --stop: stop searching searching venv after reaching `STOP` dir.
 
 # -------------------------------- Functions -------------------------------- #
 

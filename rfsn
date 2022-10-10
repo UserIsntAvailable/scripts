@@ -87,11 +87,11 @@ for Argument in "$@"; do
     BaseName=${Argument##*/}
     BaseName=${BaseName,,}
     BaseName=${BaseName/" "/$Sep}
-    BaseName=${BaseName/":"/"-"}
+    BaseName=${BaseName/":"/$Sep}
 
-    if [[ $ForceUnderscore == true ]]; then
+    if [[ $ForceHyphen == true ]]; then
         BaseName=${BaseName/"-"/$Sep}
-    elif [[ $ForceHyphen == true ]]; then
+    elif [[ $ForceUnderscore == true ]]; then
         BaseName=${BaseName/"_"/$Sep}
     fi
 

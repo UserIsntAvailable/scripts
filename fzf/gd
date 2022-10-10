@@ -2,8 +2,7 @@
 
 # Fuzzy find a directory, then cd to it.
 
-# Notes:
-# Keep in mind that if you want to see the effect of cd you need to
+# NOTE: Keep in mind that if you want to see the effect of cd you need to
 # source the script.
 
 # Dependecies:
@@ -17,7 +16,7 @@ Usage()
 {
     while read -r; do
         printf "%s\n" "$REPLY"
-    done <<- EOF
+    done <<-EOF
         Usage: gd [OPTS] [BASEDIR]
 
           -h, --help     - Display this help information.
@@ -40,12 +39,14 @@ Err()
     printf "Err: %s\n" "$2" 1>&2
     if (($1 > 0)); then
         UnsetVars
+        # shellcheck disable=2086
         return $1
     fi
 }
 
 # ----------------------------- Input Processing ----------------------------- #
 
+# shellcheck disable=2046
 (($# > 3)) && return $(Err 1 "Too many arguments.")
 
 Command="cd"
@@ -58,7 +59,10 @@ while [[ -n $1 ]]; do
             ;;
         --absolute | -a) Command="realpath" ;;
         --relative | -r) Command="echo" ;;
-        -*) return $(Err 1 "Incorrect option(s) specified.") ;;
+        -*)
+            # shellcheck disable=2046
+            return $(Err 1 "Incorrect option(s) specified.")
+            ;;
         *) break ;;
     esac
     shift
@@ -66,6 +70,7 @@ done
 
 BaseDir="${1:-$HOME}"
 
+# shellcheck disable=2046
 [[ -d $BaseDir ]] || return $(Err 1 "Directory '$BaseDir' doesn't exists.")
 
 # ----------------------------------- Main ----------------------------------- #

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Prints a Centered HEADer. i.e: the header bellow
+# Prints a Centered HEADer. i.e: the function header bellow.
 
 # Dependencies:
 # rev
@@ -12,9 +12,9 @@ set -euo pipefail
 Usage()
 {
     # TODO: Maybe rethink names of flags?
-    while read; do
+    while read -r; do
         printf '%s\n' "$REPLY"
-    done <<- EOF
+    done <<-EOF
         Usage: chead [OPTS] TEXT
 
           -h, --help              - Display this help information.
@@ -31,6 +31,7 @@ Usage()
 Err()
 {
     printf "Err: %s\n" "$2" 1>&2
+    # shellcheck disable=2086
     (($1 > 0)) && exit $1
 }
 
@@ -107,18 +108,18 @@ if [[ $MirrorStart == true ]]; then
 fi
 
 # TODO: Add better error message ( include the actual inputs ).
-((${#HeaderText} + $StartCharCount + ${#PaddingChar} * 2 > $MaxLength)) &&
-    Err 1 "The combination of all inputs is higher than '$MaxLength'"
+((${#HeaderText} + StartCharCount + ${#PaddingChar} * 2 > MaxLength)) \
+    && Err 1 "The combination of all inputs is higher than '$MaxLength'"
 
 # ----------------------------------- Main ----------------------------------- #
 
-PaddingLength=$(($MaxLength - ${#HeaderText} - ${#StartChar}))
+PaddingLength=$((MaxLength - ${#HeaderText} - ${#StartChar}))
 
 if [[ $MirrorStart == true ]]; then
-    PaddingLength=$(($PaddingLength - ${#StartChar}))
+    PaddingLength=$((PaddingLength - ${#StartChar}))
 fi
 
-PaddingLength=$(($PaddingLength / 2 / ${#PaddingChar} - 1))
+PaddingLength=$((PaddingLength / 2 / ${#PaddingChar} - 1))
 
 for ((I = 0; I <= PaddingLength; I++)); do
     Padding+="$PaddingChar"
@@ -132,7 +133,7 @@ printf -v Result "%s%s%s%s" "$StartChar" "$Padding" "$HeaderText" "$Padding"
 # instead, and keep both behaviours.
 
 if [[ $MirrorStart == true ]]; then
-    printf "%s%s\n" "$Result" "$(rev <<< "$StartChar")"
+    printf "%s%s\n" "$Result" "$(rev <<<"$StartChar")"
 else
     echo "$Result"
 fi
