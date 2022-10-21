@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Fuzzy find a directory, then cd to it.
+
+# NOTE: Keep in mind that if you want to cd automatically to the file you need
+# to source the script.
+
+cd "$(3f "${1:-$HOME}" -- -td)" || return 1

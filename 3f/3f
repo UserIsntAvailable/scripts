@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Fuzzy Find the File system.
+
+# -------------------------------- Functions -------------------------------- #
+
+Err()
+{
+    printf "Err: %s\n" "$2" 1>&2
+    # shellcheck disable=2086
+    (($1 > 0)) && exit $1
+}
+
+# ----------------------------- Input Processing ----------------------------- #
+
+while [[ -n $1 ]]; do
+    case $1 in
+        --)
+            shift
+            break
+            ;;
+        -*) Err 1 "Incorrect option(s) specified." ;;
+        *) WorkingDir=$1 ;;
+    esac
+    shift
+done
+
+if [[ -z $WorkingDir ]]; then
+    WorkingDir=$PWD
+fi
+
+[[ -d $WorkingDir ]] || Err 1 "Directory '$WorkingDir' doesn't exists."
+
+# ----------------------------------- Main ----------------------------------- #
+
+realpath "$(fd -HI -E .git -E .venv "$@" . "$WorkingDir" | fzf -i +m --black)" 2> /dev/null

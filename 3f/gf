@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Fuzzy find a file, cd to that file directory, and then opens it on $EDITOR.
+
+# NOTE: Keep in mind that if you want to cd automatically to the file you need
+# to source the script. I will just recommend to create an alias/keybind.
+
+_GO_TO_FILE()
+{
+    cd "${1%/*}" || return 1
+    $EDITOR "${1##*/}"
+}
+
+if [[ $1 == "-" ]]; then
+    if [[ -v $_GF_FILE ]]; then
+        _GO_TO_FILE "$_GF_FILE"
+    else
+        echo "No previous file visited."
+    fi
+    return 1
+fi
+
+_GF_FILE="$(3f "${1:-$HOME}" -- -tf -tl)"
+[[ -f $_GF_FILE ]] && _GO_TO_FILE "$_GF_FILE"
