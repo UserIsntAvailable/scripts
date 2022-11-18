@@ -1,0 +1,65 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Install a `.xapk` into a device.
+
+# Dependecies:
+# mktemp
+# 7z
+# fd
+# sort
+# adb
+
+# FIX: If there are several APK files with different architectures ( i.e:
+# config.arm64_v8a.apk ), make sure to check your phone's CPU architecture
+# before proceeding with installing the APK.
+#
+# TODO: A way to select on what device to installed.
+#
+# TODO: Verbose flag.
+
+# -------------------------------- Functions -------------------------------- #
+
+Err()
+{
+    printf "Err: %s\n" "$2" 1>&2
+    # shellcheck disable=2086
+    (($1 > 0)) && exit $1
+}
+
+# ----------------------------- Input Processing ----------------------------- #
+
+(($# == 0)) && Err 1 "Xapk file path needed."
+
+XapkPath=$1
+
+[[ -r $XapkPath ]] || Err 1 "File '$XapkPath' is not readable."
+
+# ----------------------------------- Main ----------------------------------- #
+
+# echo "Installing '$XapkPath'."
+
+TempFolder=$(mktemp -d)
+
+7z x "$XapkPath" -o"$TempFolder" 1>/dev/null
+
+readarray -t Apks <<<"$(fd -tf -e apk . "$TempFolder" | sort)"
+
+# echo "Installing ${Apks[@]}"
+adb install-multiple "${Apks[@]}"
+
+ObbPath="$TempFolder/Android/obb"
+if [[ -d $ObbPath ]]; then
+    # The 'com.*.apk' should always be the first entry if well packaged.
+    ObbAppPath="$ObbPath/${Apks[0]##*/}"
+    ObbAppPath="${ObbAppPath%.apk}"
+    StoragePath="/storage/emulated/0/Android/obb/"
+
+    # echo "obb folder found. Pushing $ObbAppPath -> $StoragePath"
+    adb push "$ObbAppPath" "$StoragePath"
+fi
+
+# echo "Done!!!"
+
+rm -rf "$TempFolder"
