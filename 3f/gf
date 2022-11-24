@@ -5,6 +5,8 @@
 # NOTE: Keep in mind that if you want to cd automatically to the file you need
 # to source the script. I will just recommend to create an alias/keybind.
 
+# FIX: Doesn't work if multiple files are selected.
+
 _GO_TO_FILE()
 {
     cd "${1%/*}" || return 1

@@ -33,4 +33,17 @@ fi
 
 # ----------------------------------- Main ----------------------------------- #
 
-realpath "$(fd -HI -E .git -E .venv "$@" . "$WorkingDir" | fzf -i +m --black)" 2> /dev/null
+realpath "$(fd -HI -E .git -E .venv "$@" . "$WorkingDir" | fzf -i -m --black --history="$XDG_DATA_HOME/fzf/history" --history-size=10000)" 2> /dev/null
+
+# FIX: How I can select multiple files that contain spaces?
+#
+# If I'm selecting multiple files ( no spaces ), I can use `3f ~` ( no quotes ).
+# If I'm selecting a single file ( with spaces ), I can use "`3f ~`".
+#
+# However, I don't think I can do the same with multiple files with spaces. So
+# the only solution would be to use `rfsn` on those files.
+#
+# readarray -t Output <<< "$(realpath "${FzfOutput[@]}")"
+#
+# echo "${Output[@]}"
+
