@@ -14,10 +14,8 @@ _GO_TO_FILE()
 
     local File=${1##*/}
 
-    if [[ -n $IMAGE ]]; then
-        if file "$File" | grep -qE "image|bitmap"; then
-            $IMAGE "$File"
-        fi
+    if file "$File" | grep -qE "image|bitmap" && [[ -n $IMAGE ]]; then
+        $IMAGE "$File"
     else
         $EDITOR "$File"
     fi
