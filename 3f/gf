@@ -6,15 +6,25 @@
 # to source the script. I will just recommend to create an alias/keybind.
 
 # FIX: Doesn't work if multiple files are selected.
+# TODO: Flag to force to open on $EDITOR.
 
 _GO_TO_FILE()
 {
     cd "${1%/*}" || return 1
-    $EDITOR "${1##*/}"
+
+    local File=${1##*/}
+
+    if [[ -n $IMAGE ]]; then
+        if file "$File" | grep -qE "image|bitmap"; then
+            $IMAGE "$File"
+        fi
+    else
+        $EDITOR "$File"
+    fi
 }
 
 if [[ $1 == "-" ]]; then
-    if [[ -v $_GF_FILE ]]; then
+    if [[ -n $_GF_FILE ]]; then
         _GO_TO_FILE "$_GF_FILE"
     else
         echo "No previous file visited."
@@ -22,5 +32,5 @@ if [[ $1 == "-" ]]; then
     return 1
 fi
 
-_GF_FILE="$(3f "${1:-$HOME}" -- -tf -tl)"
+_GF_FILE=$(3f "${1:-$HOME}" -- -tf -tl)
 [[ -f $_GF_FILE ]] && _GO_TO_FILE "$_GF_FILE"
