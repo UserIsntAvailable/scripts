@@ -11,20 +11,56 @@ set -euo pipefail
 
 Usage()
 {
-    # TODO: Maybe rethink names of flags?
     while read -r; do
         printf '%s\n' "$REPLY"
     done <<-EOF
-        Usage: chead [OPTS] TEXT
+Usage: chead [OPTS] TEXT
 
-          -h, --help              - Display this help information.
-          -e, --mirror-start      - If 'start-char' should be mirror to the end.
-          -l N, --max-length=N    - The max length of the header. (DEFAULT: 80)
-          -m, --margin            - If the entries should have a ' ' as margin.
-          -p c, --padding=<char>  - The character(s) used as padding. (DEFAULT: -)
-          -s c, --start=<char>    - The character(s) that starts the header. (DEFAULT: #)
+  -h, --help           - Display this help information.
+  -l N, --max-length=N - The max length of the header. (DEFAULT: 80)
+  -m, --mirror-start   - If the start header char should be mirror to the end.
+  -p, --padding        - If the header elements should be padded with a space.
+  -s C, --start=C      - The character(s) that starts the header. (DEFAULT: #)
+  -z C, --separator=C  - The character(s) used to separate elements. (DEFAULT: -)
 
-        The use of '--' to ignore proceeding options is supported.
+The use of '--' to ignore proceeding options is supported.
+
+Examples:
+
+Default behaviour:
+'''
+$ chead -- Hello World
+
+#----------------------------------Hello World----------------------------------
+'''
+
+Change max length:
+'''
+$ chead -l 40 'Hello World'
+
+#--------------Hello World--------------
+'''
+
+Mirror the start character:
+'''
+$ chead -m 'Hello World'
+
+#---------------------------------Hello World---------------------------------#
+'''
+
+Include padding between header elements:
+'''
+$ chead -p 'Hello World'
+
+# -------------------------------- Hello World --------------------------------
+'''
+
+Change the start or separator character(s):
+'''
+$ chead -s '|' -z = 'Hello World'
+
+|==================================Hello World==================================
+'''
 	EOF
 }
 
@@ -47,7 +83,7 @@ IsDigit()
 MirrorStart=false
 MaxLength=80
 Margin=false
-PaddingChar="-"
+SeparatorChar="-"
 StartChar="#"
 
 while [[ -n $1 ]]; do
@@ -58,7 +94,7 @@ while [[ -n $1 ]]; do
             exit 0
             ;;
 
-        --mirror-start | -e) MirrorStart=true ;;
+        --mirror-start | -m) MirrorStart=true ;;
 
         --max-length=*)
             IsDigit "${1%%=*}" "${1#*=}"
@@ -70,17 +106,17 @@ while [[ -n $1 ]]; do
             shift
             ;;
 
-        --margin | -m) Margin=true ;;
+        --padding | -p) Margin=true ;;
 
-        --start-char=*) StartChar="${1#*=}" ;;
+        --start=*) StartChar="${1#*=}" ;;
         -s)
             StartChar="$2"
             shift
             ;;
 
-        --padding-char=*) PaddingChar="${1#*=}" ;;
-        -p)
-            PaddingChar="$2"
+        --separator=*) SeparatorChar="${1#*=}" ;;
+        -z)
+            SeparatorChar="$2"
             shift
             ;;
 
@@ -90,7 +126,7 @@ while [[ -n $1 ]]; do
     shift
 done
 
-[[ -z $PaddingChar ]] && Err 1 "The character used as padding cannot be empty."
+[[ -z $SeparatorChar ]] && Err 1 "The character used as separator cannot be empty."
 
 HeaderText=$1
 
@@ -107,25 +143,25 @@ if [[ $MirrorStart == true ]]; then
     StartCharCount=$((${#StartChar} * 2))
 fi
 
-# TODO: Add better error message ( include the actual inputs ).
-((${#HeaderText} + StartCharCount + ${#PaddingChar} * 2 > MaxLength)) \
-    && Err 1 "The combination of all inputs is higher than '$MaxLength'"
+# TODO: Add better error message ( include the actual elements ).
+((${#HeaderText} + StartCharCount + ${#SeparatorChar} * 2 > MaxLength)) \
+    && Err 1 "The combination of all elements is higher than '$MaxLength'"
 
 # ----------------------------------- Main ----------------------------------- #
 
-PaddingLength=$((MaxLength - ${#HeaderText} - ${#StartChar}))
+SeparatorLength=$((MaxLength - ${#HeaderText} - ${#StartChar}))
 
 if [[ $MirrorStart == true ]]; then
-    PaddingLength=$((PaddingLength - ${#StartChar}))
+    SeparatorLength=$((SeparatorLength - ${#StartChar}))
 fi
 
-PaddingLength=$((PaddingLength / 2 / ${#PaddingChar} - 1))
+SeparatorLength=$((SeparatorLength / 2 / ${#SeparatorChar} - 1))
 
-for ((I = 0; I <= PaddingLength; I++)); do
-    Padding+="$PaddingChar"
+for ((I = 0; I <= SeparatorLength; I++)); do
+    Separator+="$SeparatorChar"
 done
 
-printf -v Result "%s%s%s%s" "$StartChar" "$Padding" "$HeaderText" "$Padding"
+printf -v Result "%s%s%s%s" "$StartChar" "$Separator" "$HeaderText" "$Separator"
 
 # TODO: Rename MAX_LENGTH to TARGET_LENGTH, and if string doesn't equal to
 # TARGET_LENGTH, repeat 'PADDING' until 'Result' >= TARGET_LENGTH, then
