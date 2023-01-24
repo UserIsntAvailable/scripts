@@ -5,8 +5,8 @@ set -euo pipefail
 # Creates, activates or deactivates `python`s virtual environments. If you want
 # to use the `activate` or `deactivate` functionality, use `pyenv-source`
 # instead. If you call this script with `-t` expecting to activate the virtual
-# environment, you will get instead the path of the actual virtual environment
-# ( which can also be useful if you do something like `. "$(pyenv -t)"` ).
+# environment, you will get instead `Activate  : ` or `Deactivate: ` + the path
+# of the actual virtual environment.
 
 # Dependencies:
 # python
@@ -167,7 +167,9 @@ if [[ $Toggle == true ]] && [[ -z $VenvDst ]]; then
 
     if [[ -n ${VIRTUAL_ENV:-} ]]; then
         # Bash doesn't stop to surprise me. It would way more faster to call
-        # `deactivate` directly, but I want to still keep this.
+        # `deactivate` directly, but I want to still keep this. This will also
+        # prevent to exec `pyenv -t` when the virtual environment is already
+        # deleted.
         DeactivateEnvironment "$VenvDir"
     else
         ActivateEnvironment "$VenvDir"
