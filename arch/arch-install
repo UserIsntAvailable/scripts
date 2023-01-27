@@ -1,0 +1,94 @@
+#!/usr/bin/bash
+
+# This is my custom installation script of Arch Linux. I will recommend reading
+# the commands that Im using before using it, because I hard coded some values
+# that you might not need/use. TODO tags are mostly things that you might need
+# to change.
+
+set -euo pipefail
+
+# --------------------------------- Functions ----------------------------------
+
+Err()
+{
+    printf 'Err: %s\n' "$2" 1>&2
+    # shellcheck disable=2086
+    (($1 > 0)) && exit $1
+}
+
+# https://stackoverflow.com/a/3352015
+
+TrimStart()
+{
+    echo "${1#"${1%%[![:space:]]*}"}"
+}
+
+TrimEnd()
+{
+    echo "${1%"${1##*[![:space:]]}"}"
+}
+
+# Prompts the user to select from an list of choices.
+# TODO: Add error handling.
+Choice()
+{
+    # FIX: See COLUMNS bash's man page.
+    COLUMNS=80
+    local PrevCOLUMNS=$COLUMNS
+    COLUMNS=1 # puts every element in a different line.
+
+    select Choice in "$@"; do break; done
+    echo "$Choice"
+
+    COLUMNS=$PrevCOLUMNS
+}
+
+# TODO: Maybe print each section name?
+# TODO: `Choice` could set an GLOBAL variable CHOICE, instead of echoing the
+# respond. Doing that, I could be able to just pass the Msg param directly to it.
+
+# ---------------------------------- IWCTL ---------------------------------- #
+
+# TODO: Choice between Wifi, Mobile Hostpot, and Ethernet.
+# TODO: I could reuse the same array when using `readarray`, instead of
+# declaring a new one, since they have the same length.
+# TODO: 
+
+readarray -s 4 -t DeviceOutput <<<"$(iwctl device list)"
+declare -a Devices
+
+for Line in "${DeviceOutput[@]}"; do
+    Line=$(TrimStart "$Line")
+    # FIX: This is taking for granted that a network device name can't have
+    # spaces in it.
+    Devices+=("${Line%% *}")
+done
+
+if ((${#Devices[@]} == 1)); then
+    Device="${Devices[0]}"
+    printf "Using '%s' as default network device.\n" "$Device"
+else
+    echo "What network device do you want to use?"
+    Device=$(Choice "${Devices[@]}")
+fi
+
+iwctl station "$Device" scan
+
+readarray -s 4 -t StationOutput <<<"$(iwctl station "$Device" get-networks rssi-dbms)"
+declare -a Networks
+
+for Line in "${StationOutput[@]}"; do
+    Line=$(TrimStart "$Line")
+    # The SSID standard indicates that a SSID can only have 32 characters.
+    Network=${Line:0:32}
+    Network=$(TrimEnd "$Network")
+    Networks+=("$Network")
+done
+
+echo "What network you want to use?"
+Ssid=$(Choice "${Networks[@]}")
+read -rsp "Network Password: "
+iwctl --passphrase="$REPLY" station "$Device" connect "$Ssid"
+
+# TODO: If internet connection isnt working, go back to set internet once again.
+sleep 3 && ping -c 4 archlinux.org
