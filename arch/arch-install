@@ -32,13 +32,13 @@ TrimEnd()
 # TODO: Add error handling.
 Choice()
 {
-    # FIX: See COLUMNS bash's man page.
+    # FIX: Read about `COLUMNS` on bash's man page.
     COLUMNS=80
     local PrevCOLUMNS=$COLUMNS
     COLUMNS=1 # puts every element in a different line.
 
     select Choice in "$@"; do break; done
-    echo "$Choice"
+    printf "%s" "$Choice"
 
     COLUMNS=$PrevCOLUMNS
 }
@@ -49,20 +49,30 @@ Choice()
 
 # ---------------------------------- IWCTL ---------------------------------- #
 
-# TODO: Choice between Wifi, Mobile Hostpot, and Ethernet.
-# TODO: I could reuse the same array when using `readarray`, instead of
-# declaring a new one, since they have the same length.
-# TODO: 
+# TODO: Choose between Wifi, Mobile Hostpot, and Ethernet.
+# TODO: Error out if devices or networks are not found.
 
-readarray -s 4 -t DeviceOutput <<<"$(iwctl device list)"
-declare -a Devices
+InlineMap()
+{
+    local -n Output=$1
+    local OnLine="$2"
 
-for Line in "${DeviceOutput[@]}"; do
-    Line=$(TrimStart "$Line")
-    # FIX: This is taking for granted that a network device name can't have
-    # spaces in it.
-    Devices+=("${Line%% *}")
-done
+    for ((I = 0; I < ${#Output[@]}; I++)); do
+        # Iwctl output always has `^[[0m` at the start.
+        Line="${Output[$I]:4}"
+        Line=$(TrimStart "$Line")
+        Output[$I]="$("$OnLine" "$Line")"
+    done
+}
+
+readarray -s 4 -t Devices <<<"$(iwctl device list)"
+ParseDeviceList()
+{
+    # FIX: Assumes that a network device name can't have spaces in it.
+    printf "%s" "${1%% *}"
+}
+
+InlineMap Devices ParseDeviceList
 
 if ((${#Devices[@]} == 1)); then
     Device="${Devices[0]}"
@@ -74,16 +84,16 @@ fi
 
 iwctl station "$Device" scan
 
-readarray -s 4 -t StationOutput <<<"$(iwctl station "$Device" get-networks rssi-dbms)"
-declare -a Networks
-
-for Line in "${StationOutput[@]}"; do
-    Line=$(TrimStart "$Line")
+readarray -s 4 -t Networks <<<"$(iwctl station "$Device" get-networks rssi-dbms)"
+ParseGetNetworks()
+{
     # The SSID standard indicates that a SSID can only have 32 characters.
-    Network=${Line:0:32}
+    Network=${1:0:32}
     Network=$(TrimEnd "$Network")
-    Networks+=("$Network")
-done
+    printf "%s" "$Network"
+}
+
+InlineMap Networks ParseGetNetworks
 
 echo "What network you want to use?"
 Ssid=$(Choice "${Networks[@]}")
