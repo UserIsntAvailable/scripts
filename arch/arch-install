@@ -1,9 +1,9 @@
 #!/usr/bin/bash
 
 # This is my custom installation script of Arch Linux. I will recommend reading
-# the commands that Im using before using it, because I hard coded some values
-# that you might not need/use. TODO tags are mostly things that you might need
-# to change.
+# the commands that I'm using before using it, because I hard coded some values
+# that you might not need/use. TODOs ( starting with 'Ask' ) are mostly things
+# that you `might` need to change.
 
 set -euo pipefail
 
@@ -46,10 +46,11 @@ Choice()
 # TODO: Maybe print each section name?
 # TODO: `Choice` could set an GLOBAL variable CHOICE, instead of echoing the
 # respond. Doing that, I could be able to just pass the Msg param directly to it.
+# TODO: Split, Ask, RemoveAfter functions?
 
 # ---------------------------------- IWCTL ---------------------------------- #
 
-# TODO: Choose between Wifi, Mobile Hostpot, and Ethernet.
+# TODO: Ask if Wifi, Mobile Hostpot, or Ethernet.
 # TODO: Error out if devices or networks are not found.
 
 InlineMap()
@@ -102,3 +103,53 @@ iwctl --passphrase="$REPLY" station "$Device" connect "$Ssid"
 
 # TODO: If internet connection isnt working, go back to set internet once again.
 sleep 3 && ping -c 4 archlinux.org
+
+# ------------------------------- TIMEDATECTL ------------------------------- #
+
+timedatectl set-ntp true
+
+# ---------------------------------- FDISK ---------------------------------- #
+
+# TODO: Ask if the partition should be done manually.
+
+DiskInfoSeparator="|"
+
+while :; do
+    readarray -t FdiskOutput <<<"$(fdisk -l)"
+    declare -a Disks
+
+    for ((I = 0; I < ${#FdiskOutput[@]}; I++)); do
+        Line=${FdiskOutput[$I]}
+
+        if [[ $Line =~ ^Disk[[:blank:]]/dev/ ]]; then
+            DiskInfo=${Line%%, *}
+            # FIX: Assumes that a drive name can't have spaces in it.
+            IFS=" " read -ra DiskInfo <<<"${DiskInfo//: / }"
+
+            Model=${FdiskOutput[$((++I))]}
+            Model=${Model:12} # removes 'Disk model: '
+
+            Dev=${DiskInfo[1]}
+            Size=${DiskInfo[2]}
+            Unit=${DiskInfo[3]}
+            Model=$(TrimEnd "$Model")
+
+            # TODO: Disks formatting could be better.
+            Disks+=("$Dev $DiskInfoSeparator $Size $Unit $DiskInfoSeparator $Model")
+        fi
+    done
+
+    echo "On what drive ArchLinux should be installed?"
+    Disk=$(Choice "${Disks[@]}")
+
+    # TODO: Deny the drive if it doesn't have enough space in it.
+    read -rp "
+All contents of the drive will be removed. Are you sure that you want to use:
+$Disk ? (y/N) "
+
+    [[ $REPLY =~ ^[Yy]$ ]] && break
+
+    echo
+    # Removes previous entries in case the user selected `N|n`.
+    unset Disks
+done
