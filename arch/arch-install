@@ -121,6 +121,7 @@ while :; do
     for ((I = 0; I < ${#FdiskOutput[@]}; I++)); do
         Line=${FdiskOutput[$I]}
 
+        # TODO: rom, loop and airoot devices could be ignored.
         if [[ $Line =~ ^Disk[[:blank:]]/dev/ ]]; then
             DiskInfo=${Line%%, *}
             # FIX: Assumes that a drive name can't have spaces in it.
@@ -153,3 +154,58 @@ $Disk ? (y/N) "
     # Removes previous entries in case the user selected `N|n`.
     unset Disks
 done
+
+# ---------------------------------- PARTED ---------------------------------- #
+
+# TODO: Convert `PartStart` and `EfiSize` to GBs?
+
+Disk=${Disk%% "$DiskInfoSeparator"*}
+PartStart=1
+
+# TODO: Ask if EFI or boot.
+
+EfiSize=550 # more than needed, but it shouldn't really matter.
+EfiEnd=$((PartStart + EfiSize))
+
+# TODO: Ask wanted size of swap ( or follow the default. )
+
+# FIX: Assumes that `MemTotal` is always the first entry.
+IFS=" " read -ra MemTotalSplit </proc/meminfo
+MemTotal=$((MemTotalSplit[1] / 1000000)) # kb to gb
+
+# https://askubuntu.com/a/49138
+SwapSize=$(bc -l <<<"x=l(sqrt($MemTotal)) / l(2); scale=0; 2^((x + .5) / 1)")
+
+read -rp "Are you planning to use hibernation? (y/N): "
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    HibernationSize="$MemTotal"
+else
+    HibernationSize=0
+fi
+
+SwapEnd=$(bc -l <<<"scale=3; ($EfiEnd / 1000) + $SwapSize + $HibernationSize")
+
+# TODO: Ask if $HOME and root should be separated.
+
+parted -s -a optimal "$Disk" mklabel gpt \
+    mkpart "efi" fat32 "${PartStart}MiB" "${EfiEnd}MiB" set 1 esp on \
+    mkpart "swap" linux-swap "${EfiEnd}MiB" "${SwapEnd}GiB" \
+    mkpart "root" ext4 "${SwapEnd}GiB" 100%
+
+EfiPart="${Disk}1"
+SwapPart="${Disk}2"
+RootPart="${Disk}3"
+
+# ----------------------------------- MKFS ----------------------------------- #
+
+mkfs.ext4 -q "$RootPart"
+mkswap "$SwapPart"
+mkfs.fat -F 32 "$EfiPart"
+
+# ---------------------------------- MOUNT ---------------------------------- #
+
+MountDir=/mnt
+
+mount "$RootPart" "$MountDir"
+mount --mkdir "$EfiPart" "/mnt/efi"
+swapon "$SwapPart"
