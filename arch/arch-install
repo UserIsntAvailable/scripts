@@ -185,13 +185,16 @@ SwapEnd=$(bc -l <<<"
     /* Total Swap size ( on MiB ) */
     x=(($EfiEnd / 1000) + $SwapSize + $HibernationSize) * 1024;
     scale=0;
-    /* Round to next 1 MiB mark ( needed for good aligment ) */
+    /*
+     *  Round to next 1 MiB mark ( needed for good aligment )
+     *  https://wiki.archlinux.org/title/Advanced_Format#Partition_alignment
+    */
     ((x + .5) / 1)
 ")
 
 # TODO: Ask if $HOME and root should be separated.
 
-sudo parted -s -a optimal "$Disk" mklabel gpt \
+parted -s -a optimal "$Disk" mklabel gpt \
     mkpart "efi" fat32 "${PartStart}MiB" "${EfiEnd}MiB" set 1 esp on \
     mkpart "swap" linux-swap "${EfiEnd}MiB" "${SwapEnd}MiB" \
     mkpart "root" ext4 "${SwapEnd}MiB" 100%
