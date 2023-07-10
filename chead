@@ -88,7 +88,10 @@ StartChar="#"
 
 while [[ -n $1 ]]; do
     case $1 in
-        --) break ;;
+        --)
+            shift
+            break
+            ;;
         --help | -h)
             Usage
             exit 0
@@ -128,7 +131,7 @@ done
 
 [[ -z $SeparatorChar ]] && Err 1 "The character used as separator cannot be empty."
 
-HeaderText=$1
+HeaderText="$*"
 
 [[ -z $HeaderText ]] && Err 1 "Header TEXT is required."
 
