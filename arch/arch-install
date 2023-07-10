@@ -157,8 +157,6 @@ done
 
 # ---------------------------------- PARTED ---------------------------------- #
 
-# TODO: Convert `PartStart` and `EfiSize` to GBs?
-
 Disk=${Disk%% "$DiskInfoSeparator"*}
 PartStart=1
 
@@ -169,8 +167,8 @@ EfiEnd=$((PartStart + EfiSize))
 
 # TODO: Ask wanted size of swap ( or follow the default. )
 
-# FIX: Assumes that `MemTotal` is always the first entry.
 IFS=" " read -ra MemTotalSplit </proc/meminfo
+# FIX: Assumes that `MemTotal` is always the first entry.
 MemTotal=$((MemTotalSplit[1] / 1000000)) # kb to gb
 
 # https://askubuntu.com/a/49138
@@ -183,14 +181,20 @@ else
     HibernationSize=0
 fi
 
-SwapEnd=$(bc -l <<<"scale=3; ($EfiEnd / 1000) + $SwapSize + $HibernationSize")
+SwapEnd=$(bc -l <<<"
+    /* Total Swap size ( on MiB ) */
+    x=(($EfiEnd / 1000) + $SwapSize + $HibernationSize) * 1024;
+    scale=0;
+    /* Round to next 1 MiB mark ( needed for good aligment ) */
+    ((x + .5) / 1)
+")
 
 # TODO: Ask if $HOME and root should be separated.
 
-parted -s -a optimal "$Disk" mklabel gpt \
+sudo parted -s -a optimal "$Disk" mklabel gpt \
     mkpart "efi" fat32 "${PartStart}MiB" "${EfiEnd}MiB" set 1 esp on \
-    mkpart "swap" linux-swap "${EfiEnd}MiB" "${SwapEnd}GiB" \
-    mkpart "root" ext4 "${SwapEnd}GiB" 100%
+    mkpart "swap" linux-swap "${EfiEnd}MiB" "${SwapEnd}MiB" \
+    mkpart "root" ext4 "${SwapEnd}MiB" 100%
 
 EfiPart="${Disk}1"
 SwapPart="${Disk}2"
