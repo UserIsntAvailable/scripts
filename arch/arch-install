@@ -5,9 +5,11 @@
 # that you might not need/use. TODOs ( starting with 'Ask' ) are mostly things
 # that you `might` need to change.
 
+# TODO: Use long flags version (sed --in-place, instead of -i).
+
 set -euo pipefail
 
-# --------------------------------- Functions ----------------------------------
+# -------------------------------- FUNCTIONS -------------------------------- #
 
 Err()
 {
@@ -62,7 +64,7 @@ InlineMap()
         # Iwctl output always has `^[[0m` at the start.
         Line="${Output[$I]:4}"
         Line=$(TrimStart "$Line")
-        Output[$I]="$("$OnLine" "$Line")"
+        Output[I]="$("$OnLine" "$Line")"
     done
 }
 
@@ -161,6 +163,7 @@ Disk=${Disk%% "$DiskInfoSeparator"*}
 PartStart=1
 
 # TODO: Ask if EFI or boot.
+# TODO: ntfs noatime; prealloc options.
 
 EfiSize=550 # more than needed, but it shouldn't really matter.
 EfiEnd=$((PartStart + EfiSize))
@@ -199,6 +202,10 @@ parted -s -a optimal "$Disk" mklabel gpt \
     mkpart "swap" linux-swap "${EfiEnd}MiB" "${SwapEnd}MiB" \
     mkpart "root" ext4 "${SwapEnd}MiB" 100%
 
+# FIX: It is not as simple as attaching a number.
+#
+# Probably I need to reparse `fdisk -l` to find the new partition names.
+
 EfiPart="${Disk}1"
 SwapPart="${Disk}2"
 RootPart="${Disk}3"
@@ -211,8 +218,112 @@ mkfs.fat -F 32 "$EfiPart"
 
 # ---------------------------------- MOUNT ---------------------------------- #
 
-MountDir=/mnt
-
-mount "$RootPart" "$MountDir"
+mount "$RootPart" "/mnt"
 mount --mkdir "$EfiPart" "/mnt/efi"
 swapon "$SwapPart"
+
+# --------------------------------- PACSTRAP --------------------------------- #
+
+# TODO: Configure Reflector
+# TODO: efibootmgr is not needed if system is a `boot` system.
+# TODO: osprober is needed for dual boot.
+
+pacstrap -K "/mnt" base efibootmgr grub linux linux-firmware networkmanager sudo vim
+
+# --------------------------------- GENFSTAB --------------------------------- #
+
+genfstab -U "/mnt" >>"/mnt/etc/fstab"
+
+# -------------------------------- ARCHCHROOT -------------------------------- #
+
+ChrootScriptRelPath="chroot"
+ChrootScriptFullPath="/mnt/$ChrootScriptRelPath"
+
+cat <<ARCH-CHROOT > "$ChrootScriptFullPath"
+#!/usr/bin/bash
+
+set -euo pipefail
+
+# -------------------------------- TIME ZONE -------------------------------- #
+
+# TODO: Ask time zone info.
+
+ln -sf /usr/share/zoneinfo/America/Montreal /etc/localtime
+
+hwclock --systohc
+
+# ------------------------------- LOCALIZATION ------------------------------- #
+
+# TODO: Ask what locales should be generated.
+
+Locale="en_US.UTF-8 UTF-8"
+
+sed -i -e "s/^#\$Locale/\$Locale/" /etc/locale.gen
+
+locale-gen
+
+Locale=(\$Locale)
+echo "LANG=\${Locale[0]}" > /etc/locale.conf
+
+# --------------------------------- HOSTNAME --------------------------------- #
+
+read -rp "What will be your hostname?: " Hostname
+
+echo "\$Hostname" > /etc/hostname
+
+printf "\
+127.0.0.1\tlocalhost
+::1\t\tlocalhost
+127.0.1.1\t\$Hostname.localdomain\t\$Hostname
+" > /etc/hosts
+
+echo "\$Hostname ( root ) password"
+passwd
+
+# -------------------------------- MAIN USER -------------------------------- #
+
+read -rp "What will be your main user name? (Leave blank to skip): " Username
+
+if [[ -n "\$Username" ]]; then
+    useradd -m "\$Username"
+    echo "\$Username password"
+    passwd "\$Username"
+
+    # TODO: Ask if extra user groups should be added.
+    usermod -aG audio,disk,optical,storage,video,wheel "\$Username"
+fi
+
+# ---------------------------------- VISUDO ---------------------------------- #
+
+# Normally to modify the '/etc/sudoers' file, you need to run the visudo
+# program, but you could just modify the file directly. The only consideration
+# would be that 'visudo' actually checks if the files contents are valid before
+# any changes are made.
+
+WheelGroupOption="%wheel ALL=(ALL:ALL) ALL"
+sed -i -e "s/^# \$WheelGroupOption$/\$WheelGroupOption/" /etc/sudoers
+
+# ----------------------------------- GRUB ----------------------------------- #
+
+# TODO: Ask for manual grub configuration.
+# TODO: Uncomment GRUB_DISABLE_OS_PROBER=false if dual boot is needed
+
+grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# ----------------------------- NETWORK MANAGER ----------------------------- #
+
+systemctl enable NetworkManager
+
+ARCH-CHROOT
+
+chmod +x "$ChrootScriptFullPath"
+arch-chroot "/mnt" "/$ChrootScriptRelPath"
+rm -rf "$ChrootScriptFullPath"
+
+# --------------------------------- FINISHED --------------------------------- #
+
+umount -R "/mnt"
+swapoff "$SwapPart"
+
+echo "arch-install: Done. You can safely reboot the system."
