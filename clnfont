@@ -1,0 +1,71 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Utility that downloads my font of choice (Consolas Ligaturized), then patchs
+# it with NerdFonts.
+
+# Dependencies:
+# mktemp
+# git
+# curl
+# unzip
+# python3
+# fontforge (python3-fontforge)
+
+# TODO: Quiet mode.
+# TODO: I could run all this on docker.
+
+# -------------------------------- Functions --------------------------------- #
+
+Warn()
+{
+    printf "Warning: %s\n" "$1" 1>&2
+}
+
+Err()
+{
+    printf "Error: %s\n" "$2" 1>&2
+    # shellcheck disable=2086
+    (($1 > 0)) && exit $1
+}
+
+# ----------------------------- Input Processing ----------------------------- #
+
+if (($# == 0)); then
+    echo "Usage: clnfont OUT_DIR"
+    exit 1
+fi
+
+OutDir="$(realpath $1)"
+mkdir "$OutDir"
+
+# ----------------------------------- Main ----------------------------------- #
+
+FONT="consolas-ligaturized"
+FONT_REPO="https://github.com/somq/$FONT"
+FONT_REPO_LAST_COMMIT="d11d670146a58b5a1ffd9f6a44cef432e1678e1e"
+FONT_PATCHER_BIN="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FontPatcher.zip"
+
+TempFolder=$(mktemp -d)
+cd "$TempFolder"
+
+echo "* Cloning $FONT"
+
+git clone --quiet "$FONT_REPO"
+[[ $(git --git-dir="./$FONT/.git" rev-parse HEAD) != $FONT_REPO_LAST_COMMIT ]] \
+    && Warn "$FONT repo had a new commit"
+
+echo "* Downloading Font Patcher"
+
+curl --silent -o "font-forge.zip" -L $FONT_PATCHER_BIN
+unzip -qq "font-forge.zip" -d "font-forge"
+
+FontsFolder="$FONT/Consolas-FiraCode_v3"
+while read -r; do
+    printf "* Patching: %s\n" "$REPLY"
+    ./font-forge/font-patcher --complete "$FontsFolder/$REPLY" -out "$OutDir"
+done <<<$(ls "$FontsFolder")
+
+cd # cd out of "TempFolder".
+rm "$TempFolder" -rf
