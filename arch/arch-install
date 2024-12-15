@@ -1,0 +1,329 @@
+#!/usr/bin/bash
+
+# This is my custom installation script of Arch Linux. I will recommend reading
+# the commands that I'm using before using it, because I hard coded some values
+# that you might not need/use. TODOs ( starting with 'Ask' ) are mostly things
+# that you `might` need to change.
+
+# TODO: Use long flags version (sed --in-place, instead of -i).
+
+set -euo pipefail
+
+# -------------------------------- FUNCTIONS -------------------------------- #
+
+Err()
+{
+    printf 'Err: %s\n' "$2" 1>&2
+    # shellcheck disable=2086
+    (($1 > 0)) && exit $1
+}
+
+# https://stackoverflow.com/a/3352015
+
+TrimStart()
+{
+    echo "${1#"${1%%[![:space:]]*}"}"
+}
+
+TrimEnd()
+{
+    echo "${1%"${1##*[![:space:]]}"}"
+}
+
+# Prompts the user to select from an list of choices.
+# TODO: Add error handling.
+Choice()
+{
+    # FIX: Read about `COLUMNS` on bash's man page.
+    COLUMNS=80
+    local PrevCOLUMNS=$COLUMNS
+    COLUMNS=1 # puts every element in a different line.
+
+    select Choice in "$@"; do break; done
+    printf "%s" "$Choice"
+
+    COLUMNS=$PrevCOLUMNS
+}
+
+# TODO: Maybe print each section name?
+# TODO: `Choice` could set an GLOBAL variable CHOICE, instead of echoing the
+# respond. Doing that, I could be able to just pass the Msg param directly to it.
+# TODO: Split, Ask, RemoveAfter functions?
+
+# ---------------------------------- IWCTL ---------------------------------- #
+
+# TODO: Ask if Wifi, Mobile Hostpot, or Ethernet.
+# TODO: Error out if devices or networks are not found.
+
+InlineMap()
+{
+    local -n Output=$1
+    local OnLine="$2"
+
+    for ((I = 0; I < ${#Output[@]}; I++)); do
+        # Iwctl output always has `^[[0m` at the start.
+        Line="${Output[$I]:4}"
+        Line=$(TrimStart "$Line")
+        Output[I]="$("$OnLine" "$Line")"
+    done
+}
+
+readarray -s 4 -t Devices <<<"$(iwctl device list)"
+ParseDeviceList()
+{
+    # FIX: Assumes that a network device name can't have spaces in it.
+    printf "%s" "${1%% *}"
+}
+
+InlineMap Devices ParseDeviceList
+
+if ((${#Devices[@]} == 1)); then
+    Device="${Devices[0]}"
+    printf "Using '%s' as default network device.\n" "$Device"
+else
+    echo "What network device do you want to use?"
+    Device=$(Choice "${Devices[@]}")
+fi
+
+iwctl station "$Device" scan
+
+readarray -s 4 -t Networks <<<"$(iwctl station "$Device" get-networks rssi-dbms)"
+ParseGetNetworks()
+{
+    # The SSID standard indicates that a SSID can only have 32 characters.
+    Network=${1:0:32}
+    Network=$(TrimEnd "$Network")
+    printf "%s" "$Network"
+}
+
+InlineMap Networks ParseGetNetworks
+
+echo "What network you want to use?"
+Ssid=$(Choice "${Networks[@]}")
+read -rsp "Network Password: "
+iwctl --passphrase="$REPLY" station "$Device" connect "$Ssid"
+
+# TODO: If internet connection isnt working, go back to set internet once again.
+sleep 3 && ping -c 4 archlinux.org
+
+# ------------------------------- TIMEDATECTL ------------------------------- #
+
+timedatectl set-ntp true
+
+# ---------------------------------- FDISK ---------------------------------- #
+
+# TODO: Ask if the partition should be done manually.
+
+DiskInfoSeparator="|"
+
+while :; do
+    readarray -t FdiskOutput <<<"$(fdisk -l)"
+    declare -a Disks
+
+    for ((I = 0; I < ${#FdiskOutput[@]}; I++)); do
+        Line=${FdiskOutput[$I]}
+
+        # TODO: rom, loop and airoot devices could be ignored.
+        if [[ $Line =~ ^Disk[[:blank:]]/dev/ ]]; then
+            DiskInfo=${Line%%, *}
+            # FIX: Assumes that a drive name can't have spaces in it.
+            IFS=" " read -ra DiskInfo <<<"${DiskInfo//: / }"
+
+            Model=${FdiskOutput[$((++I))]}
+            Model=${Model:12} # removes 'Disk model: '
+
+            Dev=${DiskInfo[1]}
+            Size=${DiskInfo[2]}
+            Unit=${DiskInfo[3]}
+            Model=$(TrimEnd "$Model")
+
+            # TODO: Disks formatting could be better.
+            Disks+=("$Dev $DiskInfoSeparator $Size $Unit $DiskInfoSeparator $Model")
+        fi
+    done
+
+    echo "On what drive ArchLinux should be installed?"
+    Disk=$(Choice "${Disks[@]}")
+
+    # TODO: Deny the drive if it doesn't have enough space in it.
+    read -rp "
+All contents of the drive will be removed. Are you sure that you want to use:
+$Disk ? (y/N) "
+
+    [[ $REPLY =~ ^[Yy]$ ]] && break
+
+    echo
+    # Removes previous entries in case the user selected `N|n`.
+    unset Disks
+done
+
+# ---------------------------------- PARTED ---------------------------------- #
+
+Disk=${Disk%% "$DiskInfoSeparator"*}
+PartStart=1
+
+# TODO: Ask if EFI or boot.
+# TODO: ntfs noatime; prealloc options.
+
+EfiSize=550 # more than needed, but it shouldn't really matter.
+EfiEnd=$((PartStart + EfiSize))
+
+# TODO: Ask wanted size of swap ( or follow the default. )
+
+IFS=" " read -ra MemTotalSplit </proc/meminfo
+# FIX: Assumes that `MemTotal` is always the first entry.
+MemTotal=$((MemTotalSplit[1] / 1000000)) # kb to gb
+
+# https://askubuntu.com/a/49138
+SwapSize=$(bc -l <<<"x=l(sqrt($MemTotal)) / l(2); scale=0; 2^((x + .5) / 1)")
+
+read -rp "Are you planning to use hibernation? (y/N): "
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    HibernationSize="$MemTotal"
+else
+    HibernationSize=0
+fi
+
+SwapEnd=$(bc -l <<<"
+    /* Total Swap size ( on MiB ) */
+    x=(($EfiEnd / 1000) + $SwapSize + $HibernationSize) * 1024;
+    scale=0;
+    /*
+     *  Round to next 1 MiB mark ( needed for good aligment )
+     *  https://wiki.archlinux.org/title/Advanced_Format#Partition_alignment
+    */
+    ((x + .5) / 1)
+")
+
+# TODO: Ask if $HOME and root should be separated.
+
+parted -s -a optimal "$Disk" mklabel gpt \
+    mkpart "efi" fat32 "${PartStart}MiB" "${EfiEnd}MiB" set 1 esp on \
+    mkpart "swap" linux-swap "${EfiEnd}MiB" "${SwapEnd}MiB" \
+    mkpart "root" ext4 "${SwapEnd}MiB" 100%
+
+# FIX: It is not as simple as attaching a number.
+#
+# Probably I need to reparse `fdisk -l` to find the new partition names.
+
+EfiPart="${Disk}1"
+SwapPart="${Disk}2"
+RootPart="${Disk}3"
+
+# ----------------------------------- MKFS ----------------------------------- #
+
+mkfs.ext4 -q "$RootPart"
+mkswap "$SwapPart"
+mkfs.fat -F 32 "$EfiPart"
+
+# ---------------------------------- MOUNT ---------------------------------- #
+
+mount "$RootPart" "/mnt"
+mount --mkdir "$EfiPart" "/mnt/efi"
+swapon "$SwapPart"
+
+# --------------------------------- PACSTRAP --------------------------------- #
+
+# TODO: Configure Reflector
+# TODO: efibootmgr is not needed if system is a `boot` system.
+# TODO: osprober is needed for dual boot.
+
+pacstrap -K "/mnt" base efibootmgr grub linux linux-firmware networkmanager sudo vim
+
+# --------------------------------- GENFSTAB --------------------------------- #
+
+genfstab -U "/mnt" >>"/mnt/etc/fstab"
+
+# -------------------------------- ARCHCHROOT -------------------------------- #
+
+ChrootScriptRelPath="chroot"
+ChrootScriptFullPath="/mnt/$ChrootScriptRelPath"
+
+cat <<ARCH-CHROOT > "$ChrootScriptFullPath"
+#!/usr/bin/bash
+
+set -euo pipefail
+
+# -------------------------------- TIME ZONE -------------------------------- #
+
+# TODO: Ask time zone info.
+
+ln -sf /usr/share/zoneinfo/America/Montreal /etc/localtime
+
+hwclock --systohc
+
+# ------------------------------- LOCALIZATION ------------------------------- #
+
+# TODO: Ask what locales should be generated.
+
+Locale="en_US.UTF-8 UTF-8"
+
+sed -i -e "s/^#\$Locale/\$Locale/" /etc/locale.gen
+
+locale-gen
+
+Locale=(\$Locale)
+echo "LANG=\${Locale[0]}" > /etc/locale.conf
+
+# --------------------------------- HOSTNAME --------------------------------- #
+
+read -rp "What will be your hostname?: " Hostname
+
+echo "\$Hostname" > /etc/hostname
+
+printf "\
+127.0.0.1\tlocalhost
+::1\t\tlocalhost
+127.0.1.1\t\$Hostname.localdomain\t\$Hostname
+" > /etc/hosts
+
+echo "\$Hostname ( root ) password"
+passwd
+
+# -------------------------------- MAIN USER -------------------------------- #
+
+read -rp "What will be your main user name? (Leave blank to skip): " Username
+
+if [[ -n "\$Username" ]]; then
+    useradd -m "\$Username"
+    echo "\$Username password"
+    passwd "\$Username"
+
+    # TODO: Ask if extra user groups should be added.
+    usermod -aG audio,disk,optical,storage,video,wheel "\$Username"
+fi
+
+# ---------------------------------- VISUDO ---------------------------------- #
+
+# Normally to modify the '/etc/sudoers' file, you need to run the visudo
+# program, but you could just modify the file directly. The only consideration
+# would be that 'visudo' actually checks if the files contents are valid before
+# any changes are made.
+
+WheelGroupOption="%wheel ALL=(ALL:ALL) ALL"
+sed -i -e "s/^# \$WheelGroupOption$/\$WheelGroupOption/" /etc/sudoers
+
+# ----------------------------------- GRUB ----------------------------------- #
+
+# TODO: Ask for manual grub configuration.
+# TODO: Uncomment GRUB_DISABLE_OS_PROBER=false if dual boot is needed
+
+grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# ----------------------------- NETWORK MANAGER ----------------------------- #
+
+systemctl enable NetworkManager
+
+ARCH-CHROOT
+
+chmod +x "$ChrootScriptFullPath"
+arch-chroot "/mnt" "/$ChrootScriptRelPath"
+rm -rf "$ChrootScriptFullPath"
+
+# --------------------------------- FINISHED --------------------------------- #
+
+umount -R "/mnt"
+swapoff "$SwapPart"
+
+echo "arch-install: Done. You can safely reboot the system."
