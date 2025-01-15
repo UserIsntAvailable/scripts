@@ -122,11 +122,11 @@ while :; do
     while read -r; do
         # TODO: rom, loop and airoot devices could be ignored.
         IFS=" " read -ra Disk <<<${REPLY}
-        Name=${Disk[0]}
+        Path=${Disk[0]}
         Size=${Disk[1]}
         Model=${Disk[2]//\\x20/ }
-        Disks+=("$Name $DiskSep $Size $DiskSep $Model")
-    done <<<$(lsblk --noheadings --nodeps --raw --output=name,size,model)
+        Disks+=("$Path $DiskSep $Size $DiskSep $Model")
+    done <<<$(lsblk --noheadings --nodeps --raw --output=path,size,model)
 
     echo "On what drive ArchLinux should be installed?"
     Disk=$(Choice "${Disks[@]}")
@@ -146,61 +146,51 @@ done
 # ---------------------------------- PARTED ---------------------------------- #
 
 Disk=${Disk%% "$DiskSep"*}
-PartStart=1
 
 # TODO: Ask if EFI or boot.
 # TODO: ntfs noatime; prealloc options.
 
 EfiSize=550 # more than needed, but it shouldn't really matter.
-EfiEnd=$((PartStart + EfiSize))
 
-# TODO: Ask wanted size of swap ( or follow the default. )
+# TODO: Ask wanted size of swap (or follow the default).
 
 IFS=" " read -ra MemTotalSplit </proc/meminfo
 # FIX: Assumes that `MemTotal` is always the first entry.
 MemTotal=$((MemTotalSplit[1] / 1000000)) # kb to gb
 
-# https://askubuntu.com/a/49138
+# NOTE: https://askubuntu.com/a/49138
 SwapSize=$(bc -l <<<"x=l(sqrt($MemTotal)) / l(2); scale=0; 2^((x + .5) / 1)")
 
 read -rp "Are you planning to use hibernation? (y/N): "
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    HibernationSize="$MemTotal"
-else
-    HibernationSize=0
+    SwapSize=$(bc -l <<<"$SwapSize + $MemTotal")
 fi
 
-SwapEnd=$(bc -l <<<"
-    /* Total Swap size ( on MiB ) */
-    x=(($EfiEnd / 1000) + $SwapSize + $HibernationSize) * 1024;
-    scale=0;
-    /*
-     *  Round to next 1 MiB mark ( needed for good aligment )
-     *  https://wiki.archlinux.org/title/Advanced_Format#Partition_alignment
-    */
-    ((x + .5) / 1)
-")
+sgdisk --zap-all "$Disk"
+sgdisk --new=1:0:+"${EfiSize}M"  --align-end --typecode=1:EF00 --change-name=1:"efi"  "$Disk"
+sgdisk --new=2:0:+"${SwapSize}G" --align-end --typecode=2:8200 --change-name=2:"swap" "$Disk"
 
-# TODO: Ask if $HOME and root should be separated.
+read -rp "Should ROOT and HOME be in different partitions? (y/N): "
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # NOTE: 32G is more than enough (it is what the arch wiki recommends); can
+    # always resize the partition if needed.
+    sgdisk --new=3:0:+32G --align-end --typecode=3:8300 --change-name=3:"root" "$Disk"
+    sgdisk --new=4:0:0    --align-end --typecode=4:8300 --change-name=4:"home" "$Disk"
+else
+    sgdisk --new=3:0:0    --align-end --typecode=3:8300 --change-name=3:"root" "$Disk"
+fi
 
-parted -s -a optimal "$Disk" mklabel gpt \
-    mkpart "efi" fat32 "${PartStart}MiB" "${EfiEnd}MiB" set 1 esp on \
-    mkpart "swap" linux-swap "${EfiEnd}MiB" "${SwapEnd}MiB" \
-    mkpart "root" ext4 "${SwapEnd}MiB" 100%
+readarray -t Partitions <<<$(lsblk --noheadings --raw --output=path "$Disk")
 
-# FIX: It is not as simple as attaching a number.
-#
-# Probably I need to reparse `fdisk -l` to find the new partition names.
-
-EfiPart="${Disk}1"
-SwapPart="${Disk}2"
-RootPart="${Disk}3"
+EfiPart="${Partitions[1]}"
+SwapPart="${Partitions[2]}"
+RootPart="${Partitions[3]}"
 
 # ----------------------------------- MKFS ----------------------------------- #
 
-mkfs.ext4 -q "$RootPart"
-mkswap "$SwapPart"
 mkfs.fat -F 32 "$EfiPart"
+mkswap "$SwapPart"
+mkfs.ext4 -q "$RootPart"
 
 # ---------------------------------- MOUNT ---------------------------------- #
 
