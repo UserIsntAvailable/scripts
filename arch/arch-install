@@ -110,56 +110,42 @@ sleep 3 && ping -c 4 archlinux.org
 
 timedatectl set-ntp true
 
-# ---------------------------------- FDISK ---------------------------------- #
+# ---------------------------------- LSBLK ---------------------------------- #
 
-# TODO: Ask if the partition should be done manually.
+# TODO: Ask if manual partitioning.
 
-DiskInfoSeparator="|"
+DiskSep="|"
 
 while :; do
-    readarray -t FdiskOutput <<<"$(fdisk -l)"
     declare -a Disks
 
-    for ((I = 0; I < ${#FdiskOutput[@]}; I++)); do
-        Line=${FdiskOutput[$I]}
-
+    while read -r; do
         # TODO: rom, loop and airoot devices could be ignored.
-        if [[ $Line =~ ^Disk[[:blank:]]/dev/ ]]; then
-            DiskInfo=${Line%%, *}
-            # FIX: Assumes that a drive name can't have spaces in it.
-            IFS=" " read -ra DiskInfo <<<"${DiskInfo//: / }"
-
-            Model=${FdiskOutput[$((++I))]}
-            Model=${Model:12} # removes 'Disk model: '
-
-            Dev=${DiskInfo[1]}
-            Size=${DiskInfo[2]}
-            Unit=${DiskInfo[3]}
-            Model=$(TrimEnd "$Model")
-
-            # TODO: Disks formatting could be better.
-            Disks+=("$Dev $DiskInfoSeparator $Size $Unit $DiskInfoSeparator $Model")
-        fi
-    done
+        IFS=" " read -ra Disk <<<${REPLY}
+        Name=${Disk[0]}
+        Size=${Disk[1]}
+        Model=${Disk[2]//\\x20/ }
+        Disks+=("$Name $DiskSep $Size $DiskSep $Model")
+    done <<<$(lsblk --noheadings --nodeps --raw --output=name,size,model)
 
     echo "On what drive ArchLinux should be installed?"
     Disk=$(Choice "${Disks[@]}")
 
     # TODO: Deny the drive if it doesn't have enough space in it.
     read -rp "
-All contents of the drive will be removed. Are you sure that you want to use:
-$Disk ? (y/N) "
+All contents of the drive will be removed.
+Are you sure that you want to use:
+$Disk? (y/N) "
 
     [[ $REPLY =~ ^[Yy]$ ]] && break
 
     echo
-    # Removes previous entries in case the user selected `N|n`.
     unset Disks
 done
 
 # ---------------------------------- PARTED ---------------------------------- #
 
-Disk=${Disk%% "$DiskInfoSeparator"*}
+Disk=${Disk%% "$DiskSep"*}
 PartStart=1
 
 # TODO: Ask if EFI or boot.
