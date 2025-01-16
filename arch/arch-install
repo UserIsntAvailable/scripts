@@ -231,8 +231,8 @@ genfstab -U "/mnt" >>"/mnt/etc/fstab"
 ChrootScriptRelPath="chroot"
 ChrootScriptFullPath="/mnt/$ChrootScriptRelPath"
 
-cat <<ARCH-CHROOT # ts-inject: bash
-> "$ChrootScriptFullPath"
+# ts-inject: bash
+cat <<ARCH-CHROOT > "$ChrootScriptFullPath"
 #!/usr/bin/bash
 
 set -euo pipefail
@@ -321,4 +321,4 @@ rm -rf "$ChrootScriptFullPath"
 umount -R "/mnt"
 swapoff "$SwapPart"
 
-echo "\narch-install: Done. You can safely reboot the system."
+printf "\narch-install: Done. You can safely reboot the system.\n"
