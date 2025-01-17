@@ -1,5 +1,0 @@
-#!/bin/sh
-
-picom --experimental-backends -b &
-nitrogen --restore &
-xset r rate 300 50 &
