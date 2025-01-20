@@ -1,5 +1,5 @@
 #!/bin/sh
 
-# git command to handle a bare git repo ( my dotfiles )
+# git command to handle a bare git repo (my dotfiles)
 
 git --git-dir="$HOME"/dotfiles --work-tree="$HOME" "$@"
