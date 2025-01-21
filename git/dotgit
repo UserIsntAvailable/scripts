@@ -2,16 +2,8 @@
 
 # Git wrapper to handle both my git repos, and my dotfiles repo.
 
-# fix: git clone doenst show output. (I don't think I can do anything about that)
-
-StderrGitOutputPath=$XDG_RUNTIME_DIR/git_wrapper
-git "$@" 2> "$StderrGitOutputPath"
-
-StderrGitOutput=$(cat "$StderrGitOutputPath")
-
-if [ "$StderrGitOutput" != "${StderrGitOutput#*ot a git repository}" ]; then
-    dtfs "$@"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git "$@"
 else
-    [ -n "$StderrGitOutput" ] && echo "$StderrGitOutput" 1>&2
-    exit 1
+    dtfs "$@"
 fi
